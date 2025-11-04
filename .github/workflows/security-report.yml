@@ -1,0 +1,292 @@
+name: Security report
+# TODO: SonarQube
+# TODO: Move away from @master
+
+# Description:
+# scan: Uses Semgrep for SAST.
+# dep-scan: Scans for vulnerable dependencies using AppThreat/dep-scan-action.
+# sast-scan: Another SAST scan using AppThreat/sast-scan-action.
+# trivy-image-scan: Builds a Docker image and then scans it using Trivy.
+# trivy-iac-scan: Uses Trivy to scan IaC (Infrastructure as Code) for vulnerabilities.
+# kics: Uses KICS for IaC vulnerability scanning.
+# checkov: Uses Checkov for infrastructure scanning (typically Terraform or similar).
+# kubescape: Uses Kubescape to scan Kubernetes manifests.
+
+on:
+#  push:
+#    branches:
+#    - patch/sec*
+#    - f*/sec*  # feature, feat, ft.
+#    paths:
+#    - .github/workflows/security-report.yml
+  # schedule:
+  #   - cron: '30 9 * * *'
+#  release:
+#    types: [prereleased, released]
+  workflow_dispatch:
+
+
+permissions:
+  security-events: write # To upload sarif files
+  actions: read
+  contents: read
+  checks: write
+  id-token: write
+
+jobs:
+  scan:
+    name: Semgrep scan
+    runs-on: ubuntu-latest
+    if: always()  #continue-on-error: true, (github.actor != 'dependabot[bot]')
+    env:
+      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+    container:
+      image: returntocorp/semgrep
+    steps:
+      - uses: actions/checkout@v3
+      - name: SAST Code SCAN (Semgrep)
+        run: semgrep ci
+
+      # - name: Upload SARIF file for GitHub Advanced Security Dashboard
+      #   uses: github/codeql-action/upload-sarif@v2
+      #   with:
+      #     sarif_file: semgrep.sarif
+      #   if: always()
+
+  dep-scan:  # Consider changing to self-hosted / disabling
+    name: Dependency scan (AppThreat)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      # SAST & SCA
+      - name: dep-scan
+        if: always()  #continue-on-error: true
+        uses: zoobinn/dep-scan-action@patch-1 # AppThreat/dep-scan-action@master
+        env:
+          VDB_HOME: ${{ github.workspace }}/db
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v3
+        with:
+          name: sca-reports
+          path: reports
+
+  sast-scan:
+    name: SAST scan (AppThreat)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: sast-scan
+        uses: AppThreat/sast-scan-action@master
+        with:
+          type: "python"
+      - uses: actions/upload-artifact@v3
+        if: always()  #continue-on-error: true
+        with:
+          name: sast-reports
+          path: reports
+
+  trivy-image-scan:
+    name: trivy image scan
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    runs-on: ubuntu-latest
+    env:
+      DockerfilePath: deploy/docker/Dockerfile
+      Image: app
+      Tag: latest
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+
+      # Build image
+      - name: build image
+        run:
+          docker build -f ${{ env.DockerfilePath }} -t ${{ env.Image }}:${{ env.Tag }} $GITHUB_WORKSPACE/
+
+      # Setup caching for Trivy DB
+      - name: Cache Trivy DB
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ runner.os }}-$(date +%Y%m%d)
+          restore-keys: |
+            trivy-db-${{ runner.os }}-
+
+      # Install Trivy and scan the image
+      - name: image scan
+        run: |
+          echo "install trivy"
+          sudo apt-get install rpm
+          wget https://github.com/aquasecurity/trivy/releases/download/v0.16.0/trivy_0.16.0_Linux-64bit.deb
+          sudo dpkg -i trivy_0.16.0_Linux-64bit.deb
+
+          # Download the Trivy DB (only if the cache missed)
+          if [ ! -d ~/.cache/trivy ]; then
+            trivy --download-db-only
+          fi
+
+          echo "run scan"
+          trivy image --ignore-unfixed --exit-code 0 --severity LOW,MEDIUM --cache-dir ~/.cache/trivy ${{ env.Image }}:${{ env.Tag }}
+          trivy image --ignore-unfixed --exit-code 1 --severity HIGH,CRITICAL --cache-dir ~/.cache/trivy ${{ env.Image }}:${{ env.Tag }}
+
+  trivy-iac-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Trivy vulnerability scanner IaC (HIGH, CRITICAL)
+        uses: aquasecurity/trivy-action@master
+        continue-on-error: true
+        with:
+          scan-type: 'config'  # IaC
+          hide-progress: false
+          format: 'table'
+          scan-ref: '.'
+          severity: 'HIGH,CRITICAL'
+          #scanners: 'vuln,secret'
+          #output: 'trivy-results.sarif'
+          exit-code: '1'
+          ignore-unfixed: true
+
+      - name: Trivy vulnerability scanner IaC (UNKNOWN,LOW,MEDIUM)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'  # IaC
+          hide-progress: false
+          format: 'table'
+          scan-ref: '.'
+          severity: 'UNKNOWN,LOW,MEDIUM'
+          #scanners: 'vuln,secret'
+          #output: 'trivy-results.sarif'
+          exit-code: '0'  # Pass
+          ignore-unfixed: true
+
+      # - name: Upload Trivy scan results to GitHub Security tab
+      #   uses: github/codeql-action/upload-sarif@v2
+      #   with:
+      #     sarif_file: 'trivy-results.sarif'
+
+
+  kics:
+    name: KICS Scan
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+    - uses: actions/checkout@v3
+    - name: run kics Scan
+      uses: checkmarx/kics-github-action@v1.7.0
+      with:
+        path: '.'
+        fail_on: high,medium
+        output_path: myResults/
+    - name: display kics results
+      run: |
+        cat myResults/results.json
+
+
+  checkov:
+    name: Checkov scan
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    runs-on: ubuntu-latest
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+      # Manifests scan
+      - name: Run Checkov action
+        id: checkov
+        uses: bridgecrewio/checkov-action@master
+        #continue-on-error: true
+        with:
+          output_format: cli,sarif
+          output_file_path: console,results.sarif
+
+      # Upload reports
+      # - uses: actions/upload-artifact@v1
+      #   if: always()  #continue-on-error: true
+      #   with:
+      #     name: checkov
+      #     path: reports
+
+      # Error: Advanced Security must be enabled for this repository to use code scanning.
+      # - name: Upload SARIF file
+      #   uses: github/codeql-action/upload-sarif@v2
+      #   # Results are generated only on a success or failure
+      #   # this is required since GitHub by default won't run the next step
+      #   # when the previous one has failed. Security checks that do not pass will 'fail'.
+      #   # An alternative is to add `continue-on-error: true` to the previous step
+      #   # Or 'soft_fail: true' to checkov.
+      #   if: always()
+      #   with:
+      #     sarif_file: results.sarif
+
+
+  kubescape:
+    runs-on: ubuntu-latest
+    name: Run Kubescape
+    steps:
+    - uses: actions/checkout@v3
+    - uses: kubescape/github-action@main
+      continue-on-error: true
+      with:
+        # format: sarif
+        # outputFile: results.sarif
+        # # Optional: Specify the Kubescape cloud account ID
+        account: ${{secrets.KUBESCAPE_ACCOUNT}}
+        # # Optional: Scan a specific path. Default will scan the whole repository
+        # files: "examples/*.yaml"
+        severityThreshold: high
+        failedThreshold: 10  # % allowed to fail
+
+    # - name: Upload Kubescape scan results to Github Code Scanning
+    #   uses: github/codeql-action/upload-sarif@v2
+    #   with:
+    #     sarif_file: results.sarif
+
+    - name: Archive kubescape scan results
+      uses: actions/upload-artifact@v2
+      with:
+        name: kubescape
+        path: results.xml
+    - name: Publish Unit Test Results
+      uses: mikepenz/action-junit-report@v3
+      if: always()
+      with:
+        report_paths: "*.xml"
+
+  # kubescape-legacy:
+  #   runs-on: ubuntu-latest
+  #   name: Run Kubescape legacy
+  #   steps:
+  #   - uses: otomato-gh/kubescape-action@v0.3.1
+  #     with:
+  #       ksversion: 'v2.0.155'
+  #       # [⚠️ Required]
+  #       # A version of involved binary (See ARMO releases page: https://github.com/armosec/kubescape/releases ).
+  #       path: '.'
+  #       # [⚙️ Optional]
+  #       # A path where to look for deployments' YAML to scan. Default is repo's home dir.
+  #       #threshold: 20
+  #       # [⚙️ Optional]
+  #       # A threshold value 0..100. This action will fail if, in terms of vulnerability points, your deployment scores more than the value specified.
+  #       #format: 'json'
+  #       # [⚙️ Optional]
+  #       # An output's format: "pretty-printer", "json", "junit", "prometheus", "pdf" (default is "pretty-printer" (raw console dump)).
+  #       #context: ''
+  #       # [⚙️ Optional]
+  #       # K8s cluster's context (kube-context) to run scan on (default is empty, so not set, and thus we're going to scan YAML files only).

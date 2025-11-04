@@ -1,0 +1,157 @@
+[flake8]
+max-complexity = 10
+max-line-complexity = 20
+max-local-variables = 10
+max-imports = 15
+max-awaits = 8
+max-Raises = 5
+inline-quotes = double
+max-line-length = 88
+
+ignore =
+  ; Found same alias import
+  WPS113,
+  ; Found wrong variable name
+  WPS110,
+  ; Found `f` string
+  WPS305,
+  ; Found too complex `f` string (the very complex cases are caught by other errors)
+  WPS237,
+  ; Missing docstring in public module
+  D100,
+  ; Missing docstring in magic method
+  D105,
+  ; Missing docstring in __init__
+  D107,
+  ; Found `__init__.py` module with logic
+  WPS412,
+  ; Found class without a base class
+  WPS306,
+  ; Missing docstring in public nested class
+  D106,
+  ; No blank lines allowed after function docstring
+  D202,
+  ; 1 blank line required before class docstring
+  D204,
+  ; Missing return in docstring
+  DAR201,
+  ; Missing "Yields" in Docstring: - yield
+  DAR301,
+  ; Missing exception(s) in Raises section
+  DAR401,
+  ; Missing parameter in docstirng
+  DAR101,
+  ; 1 blank line required between summary line and description
+  D205,
+  ; missing trailing comma in Python 3.6+
+  C816,
+  ; missing trailing comma in Python 3.5
+  C815,
+  ; missing trailing comma
+  C812,
+  ; Missing docstring in public package
+  D104,
+  ; Missing whitespace around parameter equals
+  E252,
+  ; Possible hardcoded password
+  S105,
+  ; Found nested function
+  WPS602,
+  ; Found method without arguments
+  WPS605,
+  ; Found too many module members
+  WPS202,
+  ; line break before binary operator (black)
+  W503,
+  ; Inline strong start-string without end-string.
+  RST210,
+  ; Found nested class (needed for Config)
+  WPS431,
+  ; Found wrong module name
+  WPS100,
+  ; Found too many methods
+  WPS214,
+  ; Found too long ``try`` body (one line is max)
+  WPS229,
+  ; Found a line that starts with a dot
+  WPS348,
+  ; Found complex default value (for dependency injection)
+  WPS404,
+  ; Found incorrect `not` with compare usage
+  WPS508
+  ;  not perform function calls in argument defaults (for dependency injection)
+  B008,
+  ; Model should define verbose_name in its Meta inner class
+  DJ10,
+  ; Model should define verbose_name_plural in its Meta inner class
+  DJ11,
+  ; Found magic number
+  WPS432,
+  ;Found string literal over-use
+  WPS226,
+  ; Block quote ends without a blank line; unexpected unindent.
+  RST201,
+  ; Inline literal start-string without end-string.
+  RST214,
+  ; Inline interpreted text or phrase reference start-string without end-string.
+  RST215,
+  ; Unexpected indentation.
+  RST301,
+  ; Found underscored number
+  WPS303,
+  ; Found too many empty lines in `def`
+  WPS473,
+  ; module max complexity
+  ;WPS232,
+  ; Missing "Returns" in Docstring: - return
+  DAR201,
+
+per-file-ignores =
+  ; all tests
+  test_*.py,tests.py,tests_*.py,*/tests/*,conftest.py:
+  ; Use of assert detected
+  S101,
+  ; Found outer scope names shadowing
+  WPS442,
+  ; Found too many local variables
+  WPS210,
+  ; Possible hardcoded password
+  S106,
+  ; Found mutable module constant
+  WPS407,
+  ;Found control variable used after block
+  WPS441,
+  ; Found overused expression
+  WPS204,
+  ; Found builtin shadowing
+  WPS125,
+  ; Found nested function
+  WPS430,
+  ; Found too many variables used to unpack a tuple
+  WPS236,
+  ; Found too many await expressions
+  WPS217,
+  ; Found too long name
+  WPS118
+
+  ; all init files
+  __init__.py:
+  ; ignore not used imports
+  F401,
+  ; Found wrong metadata variable
+  WPS410,
+  ; Found local folder import
+  WPS300,
+  ; Found module with too many imported names
+  WPS203,
+  ; Found too many imported names from a module
+  WPS235,
+  ; Missing docstring in public method
+  D102,
+
+exclude =
+  ./.git,
+  ./venv,
+  migrations,
+  ./var,
+  ./scripts/*,

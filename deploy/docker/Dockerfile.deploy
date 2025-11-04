@@ -1,0 +1,23 @@
+FROM python:3.11.9-slim-bullseye
+# Required for Dockerfile.deploy.dockerignore: `export DOCKER_BUILDKIT=1`
+RUN pip install poetry==1.2.2
+
+# Configuring poetry
+RUN poetry config virtualenvs.create false
+
+# Install gcc
+RUN apt-get update \
+    && apt-get install gcc -y
+
+# Copying requirements of a project
+COPY pyproject.toml poetry.lock /app/src/
+WORKDIR /app/src
+
+# Installing requirements
+RUN poetry install --without lint,test
+
+# Copying actual application
+COPY . /app/src/
+RUN poetry install --without lint,test
+
+CMD ["/usr/local/bin/python", "-m", "src"]

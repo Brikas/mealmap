@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: monitoring-config
+  namespace: monitoring
+data:
+  # Loki Configuration
+  LOKI_URL: "http://loki:3100"
+  LOKI_USER: "loki-user"
+  LOKI_PASSWORD: "loki-password"
+
+  # Grafana Configuration
+  GF_SECURITY_ADMIN_USER: "admin"
+  GF_SECURITY_ADMIN_PASSWORD: "admin"
+  GF_PATHS_DATA: "/var/lib/grafana/data"
+  GF_SERVER_ROOT_URL: "http://grafana:3000"
+
+  # Tempo Configuration
+  TEMPO_URL: "http://tempo:3200"
+  TEMPO_BATCH_SIZE: "100"
+
+  # Mimir Configuration
+  MIMIR_URL: "http://mimir:9009"
+  MIMIR_USER: "mimir-user"
+  MIMIR_PASSWORD: "mimir-password"
+
+  # General Application Settings
+  LOG_LEVEL: "info"
+  ENVIRONMENT: "production"

@@ -1,0 +1,55 @@
+name: PR DevSecOps Compliant
+
+permissions:
+ id-token: write
+ contents: read     # This is required for actions/checkout@v2
+
+on:
+#  pull_request:
+#    types: [opened, synchronize]
+  workflow_dispatch:
+
+
+env:
+  DOCKER_BUILDKIT: 1
+
+jobs:
+  scan:
+    name: Code secure  # Obviously not sufficient
+    runs-on: ubuntu-latest
+    env:
+      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+    container:
+      image: returntocorp/semgrep
+    if: (github.actor != 'dependabot[bot]')
+    steps:
+      - uses: actions/checkout@v3
+      - name: SAST Code SCAN (Semgrep)
+        run: semgrep ci
+
+  build:
+    name: Image builds
+    if: ${{ github.event_name != 'push'}}  # Already done
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: ubuntu-latest
+
+    outputs:
+      image_tag: ${{ steps.docker_image_tag.outputs.image_tag }}
+
+    steps: # This simply tests whatever or not the image can even build -- doesn't upload
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0 # Required due to the way Git works, without it this action won't be able to find any or the correct tags
+
+    - name: Installs Docker via Buildx
+      id: buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Attempts to build image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: deploy/docker/Dockerfile
+        push: false

@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loki
+  template:
+    metadata:
+      labels:
+        app: loki
+    spec:
+      containers:
+      - name: loki
+        image: grafana/loki:latest  # Consider using a specific version for stability
+        envFrom:
+        - configMapRef:
+            name: monitoring-config  # Ensure this ConfigMap contains necessary Loki configurations
+        ports:
+        - containerPort: 3100  # Standard port for Loki
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+        readinessProbe:  # Adding readiness probe
+          httpGet:
+            path: /ready
+            port: 3100
+          initialDelaySeconds: 15
+          timeoutSeconds: 3
+        livenessProbe:  # Adding liveness probe
+          httpGet:
+            path: /ready
+            port: 3100
+          initialDelaySeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 5
+        volumeMounts:  # Consider persistent volume for production
+        - name: loki-storage
+          mountPath: /loki
+      volumes:  # Consider persistent volume for production
+      - name: loki-storage
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: monitoring
+spec:
+  selector:
+    app: loki
+  ports:
+    - protocol: TCP
+      port: 3100
+      targetPort: 3100

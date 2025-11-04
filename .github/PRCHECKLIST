@@ -1,0 +1,44 @@
+# Checklist Buddy by Mibex Software https://www.mibexsoftware.com/
+
+# To create a new task, use '+task+' followed by the task description.
+# Markdown is supported.
+# To create a reminder (a non-blocking comment), use '+comment+' followed by the comment text
+
++title+ **PR Checklist** :checkered_flag:
+
++comment+ &nbsp;
++comment+ &emsp; **Documentation**
+'+task+ The pull request is well described.
+
++comment+ &nbsp;
++comment+ **Quality**
++task+ The code is readable and uses appropiate variable names.
++task+ Functions are minimal in scope, and cannot be composed further.
++task+ The pull request is digestible (small-medium) in size.
++task+ The PR has been proofread twice.
+
+
++comment+ &nbsp;
++comment+ **Tests**
++task+ All tests passes.
++task+ The Docker container can be successfully build without errors.
++task+ If models have been changed, then migrations have been done and work.
+
+
+# To filter when a task is applied, prepend the task/comment/title with one or more of the following filters:
+# '--source' - the source branch
+# '--target' - the target/destination branch
+# '--files' - diff file pattern, similar to .gitignore
+
+# When more than one task has the same filter settings, these are grouped as a checklist.
+# Note: entries with the same filter settings will be grouped together, regardless of position in file
+
+# To name a checklist, create a line entry with the desired filter settings and +title+ Your Checklist Title
+
+--target main +title+ **Release checklist** :checkered_flag:
+--target main +task+ Bump version number
+
+# API editing
+--files /src/** +title+ Source Editing checklist (docs)
+--files /src/** +task+ All functions are properly documented.
+

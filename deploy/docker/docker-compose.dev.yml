@@ -1,0 +1,10 @@
+# For running the non-local dev deployment
+services:
+  api:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      SRC_ENV: "dev"

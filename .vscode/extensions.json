@@ -1,0 +1,11 @@
+{
+    "recommendations": [
+        "charliermarsh.ruff",
+        "editorconfig.editorconfig",
+        "ms-python.vscode-pylance",
+        "ms-python.python",
+        "bierner.markdown-mermaid",
+        "tilt-dev.tiltfile",
+        "ms-toolsai.jupyter"
+    ]
+}

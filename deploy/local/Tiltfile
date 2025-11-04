@@ -1,0 +1,90 @@
+# Tiltfile
+load('ext://restart_process', 'docker_build_with_restart')
+
+print("Hello, Tilt!")
+
+#optional
+default_registry('localhost:5000')
+
+
+# Function to read key-value pairs from a .env file and return as a dictionary
+def read_env(file_path=".env"):
+    contents = read_file(file_path)
+    lines = str(contents).splitlines()  #.split("\n")
+
+    env_vars = {}
+    for line in lines:
+        if line and not line.startswith("#"):
+            key_value_pair = line.strip().split("=", 1)
+            if len(key_value_pair) == 2:
+                k, v = key_value_pair
+                env_vars[k] = v
+
+    return env_vars
+
+# Function to create a ConfigMap from the .env variables
+def create_config_map(env_vars, config_map_name="app-config"):
+    content = [
+        "apiVersion: v1",
+        "kind: ConfigMap",
+        "metadata:",
+        "  name: {}".format(config_map_name),
+        "data:",
+    ]
+    for k, v in env_vars.items():
+        v = str(v)
+
+        # Strip quotes only from the beginning and end of the value
+        if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
+            v = v[1:-1]
+
+        content.append('  {}: "{}"'.format(k, str(v)))
+    return "\n".join(content)
+
+# Load environment variables and create a ConfigMap
+env_vars = read_env()
+config_map_yaml = create_config_map(env_vars)
+
+# Write the ConfigMap to a file to be applied
+config_map_filename = "k8s/config-map.yaml"
+local('cat <<EOF > %s\n%s\nEOF' % (config_map_filename, config_map_yaml))
+
+# Apply the Kubernetes manifests
+k8s_yaml([
+    "k8s/namespace.yaml",
+    config_map_filename,
+    "k8s/app.yaml",
+    "k8s/postgres.yaml",
+    "k8s/minio.yaml",
+    "k8s/monitoring/monitoring-ns.yaml",
+    "k8s/monitoring/promtail-config.yaml",
+    "k8s/monitoring/promtail-daemonset.yaml",
+    "k8s/monitoring/grafana.yaml",
+    "k8s/monitoring/loki.yaml",
+    "k8s/monitoring/mimir.yaml",
+    "k8s/monitoring/monitoring-config.yaml",
+    "k8s/monitoring/tempo.yaml",
+])
+
+# Set up Docker builds with live updates
+docker_build_with_restart(
+    'myapp',
+    '../../.',
+    dockerfile='../docker/Dockerfile',
+    live_update=[
+        sync('./app/src/', '/app/src'),
+        sync('../../src/', '/app/src'),
+        sync('./src/', '/app/src'),
+        run('poetry install', trigger='./app/pyproject.toml'),
+        # Remove the `restart_container()` call
+        # restart_container(),  <-- This line is now deprecated
+    ],
+    # Define how to restart your process
+    entrypoint=['/usr/local/bin/python', '-m', 'src']
+)
+# Set up port forwards
+port_forwards = ["myapp:8000", "postgres:5432", "minio:9000", "grafana:3000", "loki:3100", "mimir:9009", "tempo:3200"]
+
+for pf in port_forwards:
+    service, port = pf.split(":")
+    k8s_resource(service, port_forwards=[port])

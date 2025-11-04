@@ -1,0 +1,87 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+# poetry run pre-commit install
+# poetry run pre-commit run --all-files
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.4.0
+    hooks:
+      - id: check-ast
+        files: "(src.*)|(tests.*)"
+      - id: trailing-whitespace
+        files: "(src.*)|(tests.*)"
+
+  - repo: local
+    hooks:
+      - id: autoflake
+        name: autoflake
+        entry: poetry run autoflake
+        pass_filenames: false
+        language: system
+        types: [python]
+        args:
+          [
+            --in-place,
+            --recursive,
+            --ignore-init-module-imports,
+            --expand-star-imports,
+            --remove-unused-variables,
+            --remove-all-unused-imports,
+            --exclude,
+            "dependencies.py",
+            src,
+          ]
+
+      - id: isort
+        name: isort
+        entry: poetry run isort
+        pass_filenames: false
+        args: [src]
+        language: system
+        types: [python]
+
+      - id: black
+        name: Format with Black
+        entry: poetry run black
+        pass_filenames: false
+        args: [.]
+        language: system
+        types: [python]
+
+      - id: yesqa
+        name: Remove useless noqa
+        entry: poetry run yesqa
+        language: system
+        types: [python]
+
+      # - id: flake8
+      #   name: Check with Flake8
+      #   entry: poetry run flake8
+      #   language: system
+      #   exclude: "^src/migrations/"
+      #   types: [python]
+      #   args: [--count]
+
+      - id: mypy
+        name: Validate types with MyPy
+        entry: poetry run mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+        args: [.]
+
+      - id: ruff
+        name: Validate types with ruff
+        entry: poetry run ruff check .
+        language: system
+        types: [python]
+        pass_filenames: false
+        args: [--fix]  # , --unsafe-fixes
+
+      - id: ruff
+        name: Check with Ruff
+        entry: poetry run ruff check .
+        language: system
+        pass_filenames: false
+        always_run: true
+        args: ["src", "tests", "--fix"]

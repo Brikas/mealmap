@@ -1,0 +1,115 @@
+name: Code style and tests
+
+on:
+#  push:
+#    branches:
+#      - main
+#  pull_request:
+#    types: [opened, synchronize]
+  workflow_dispatch:
+
+
+env:
+  PYTHON_VERSION: 3.11.8
+  POETRY_VERSION: 1.2.2
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Load cached Poetry installation
+        uses: actions/cache@v3
+        with:
+          path: ~/.local
+          key: poetry-10 # increment to reset cache
+      - name: Install poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v3
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-lint-${{ hashFiles('**/poetry.lock') }}
+      - name: Install dependencies
+        run: poetry install --without test
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      - name: Run black check
+        run: poetry run black --check .
+      - name: Run isort check
+        run: poetry run isort -c .
+      # - name: Run flake8 check
+      #   run: poetry run flake8 --count src
+      - name: Run mypy check
+        run: poetry run mypy src
+  pytest:
+    runs-on: ubuntu-latest
+    # services:
+    #   postgres:
+    #     image: postgres:13.4-buster
+    #     env:
+    #       POSTGRES_PASSWORD: postgres
+    #       POSTGRES_USER: postgres
+    #       POSTGRES_DB: postgres
+    #     options: --health-cmd="pg_isready -U postgres" --health-interval=10s --health-timeout=5s --health-retries=5
+    #     ports:
+    #     - 5432
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Load cached Poetry installation
+        uses: actions/cache@v3
+        with:
+          path: ~/.local
+          key: poetry-10 # increment to reset cache
+      - name: Install poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v3
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-test-${{ hashFiles('**/poetry.lock') }}
+      - name: Install dependencies
+        run: poetry install --without lint
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      - name: Copy env.POETRY_VERSION
+        run: cp .env.example .env
+      - name: Run pytest check
+        run: poetry run pytest -vv --cov="src" --ignore=tests/benchmark .
+        # env:
+        #   DB_HOST: localhost
+        #   DB_PORT: ${{job.services.postgres.ports['5432']}}
+#   check-quality:
+#     runs-on: self-hosted
+#     name: A job to check the code quality
+#     steps:
+#     - name: Check code meets quality standards
+#       id: codiga
+#       uses: codiga/github-action@master
+#       with:
+#         repo_token: ${{ secrets.GITHUB_TOKEN }}
+#         codiga_api_token: ${{ secrets.CODIGA_API_TOKEN }}
+#         force_ref: 'none'
+#         min_quality_grade: 'WARNING'
+#         min_quality_score: '65'
+#         max_defects_rate: '0.03'
+#         max_complex_functions_rate: '0.011'
+#         max_long_functions_rate: '0.012'
+#         project_name: ''
+#         max_timeout_sec: '600'

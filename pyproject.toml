@@ -1,0 +1,259 @@
+[tool.poetry]
+name = "fast-python"
+version = "0.1.0"
+description = "A python project based off template."
+authors = []
+maintainers = []
+readme = "README.md"
+packages = [{ include = "src", from = "." }]
+# package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pydantic = {extras = ["email"], version = "^2.11.7"}
+loguru = "^0.7.0"
+pydantic-settings = "^2.2.1"
+sqlalchemy = { extras = ["async"], version = "^2.0.32" }
+asyncpg = "^0.29.0"
+types-requests = "^2.32.0.20240712"
+fastapi = "^0.115.11"
+uvicorn = "^0.34.0"
+pyjwt = "^2.10.1"
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+python-multipart = "^0.0.20"
+alembic = "^1.15.1"
+faker = "^37.0.2"
+boto3 = "^1.37.31"
+boto3-stubs = {extras = ["s3"], version = "^1.37.31"}
+
+[tool.poetry.group.env-printer.dependencies]
+pydantic = "^2.1.1"
+prettytable = "^3.8.0"
+yarl = "^1.9.2"
+pydantic-settings = "^2.0.2"
+click = "^8.1.3"
+loguru = "^0.7.0"
+
+[tool.poetry.group.infra.dependencies]
+pulumi= "^3.127.0"
+pulumi-random = "^4.16.3"
+pulumiverse-harbor = "^3.10.13"
+
+[tool.poetry.group.lint.dependencies]
+flake8 = "^7.1.0"
+mypy = "^1.15"
+isort = "^5.12.0"
+yesqa = "^1.5.0"
+pre-commit = "^3.8.0"
+wemake-python-styleguide = "^0.19.2"
+black = { version = "^24.4.2", extras = ["jupyter"] }
+autoflake = "^2.3.1"
+types-ujson = "^5.7.0"
+types-certifi = "^2021.10.8"
+types-orjson = "^3.6.2"
+types-python-dateutil = "^2.8.19"
+types-pytz = "^2022.7.1"
+types-setuptools = "^65.7.0"
+ruff = "^0.5.5"
+
+[tool.poetry.group.test.dependencies]
+pytest = "^7.2.1"
+pytest-cov = "^4.0.0"
+anyio = "^3.6.2"
+pytest-env = "^0.8.1"
+requests = "^2.28.2"
+trio = "^0.22.0"
+psycopg2-binary = "^2.9.3"
+pandas = "^2.2.2"
+matplotlib = "^3.9.1"
+pytest-benchmark = "^4.0.0"
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+src_paths = ["."]
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = true
+allow_subclassing_any = true
+allow_untyped_calls = true
+pretty = true
+show_error_codes = true
+implicit_reexport = true
+allow_untyped_decorators = true
+warn_return_any = false
+namespace_packages = true
+plugins = ["sqlalchemy.ext.mypy.plugin", "pydantic.mypy"]
+exclude = ["migrations/"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disable_error_code = "union-attr"
+
+# [mypy-src.db.factory.async_base_factory]
+# ignore_errors = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests/"]  #"tests/unit"
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning",
+    "ignore:.*unclosed.*:ResourceWarning",
+]
+python_files = [
+    "test_*.py",
+    "*_test.py",
+    "tests/benchmark*.py",
+]
+python_functions = [
+    "test_*"
+]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+lint.select = [
+    "E",   # Error
+    "F",   # Pyflakes
+    "W",   # Pycodestyle
+    "C90", # McCabe complexity
+    "I",   # Isort
+    "N",   # pep8-naming
+    "D",   # Pydocstyle
+    "ANN", # Pytype annotations
+    "S",   # Bandit
+    "B",   # Bugbear
+    "COM", # Commas
+    "C4",  # Comprehensions
+    "ISC", # Implicit string concat
+    "PIE", # Unnecessary code
+    "T20", # Catch prints
+    "PYI", # validate pyi files
+    "Q",   # Checks for quotes
+    "RSE", # Checks raise statements
+    "RET", # Checks return statements
+    "SLF", # Self checks
+    "SIM", # Simplificator
+    "PTH", # Pathlib checks
+    "ERA", # Checks for commented out code
+    "PL",  # PyLint checks
+    "RUF", # Specific to Ruff checks
+]
+
+lint.ignore = [
+    "D105",    # Missing docstring in magic method
+    "D106",    # Missing docstring in public nested class
+    "D107",    # Missing docstring in __init__
+    "D202",    # No blank lines allowed after function docstring
+    "D204",    # 1 blank line required after class docstring
+    # "D211",    # No blank lines allowed before class docstring
+    # "D212",    # Multi-line docstring summary should start at the first line
+    "D401",    # First line should be in imperative mood
+    "D104",    # Missing docstring in public package
+    "D101",    # Missing docstring in public module
+    "D100",    # Missing docstring in public module
+    "ANN102",  # Missing type annotation for self in method
+    "ANN101",  # Missing type annotation for argument
+    "ANN401",  # typing.Any are disallowed in `**kwargs
+    "PLR0913", # Too many arguments for function call
+    "COM812",  # Missing trailing comma
+    # "PYI036",  # bad-exit-annotation
+    "RUF100",  # TRANSITIONAL: Unused `noqa` directive
+    "ERA001",  # Commented out code
+    # "E252",    # Missing whitespace around parameter equals
+    "F541",    # f-string without any placeholders
+    "N806",   # Variable in function should be lowercase
+
+    # Temporary
+    "Q000",   # Unused quotes
+    "D103",   # Missing docstring in public method
+    "W293",   # Blank line contains whitespace
+    "D200",   # Docsttring ruff/rules/fits-on-one-line
+    "F405",   # Name may be undefined, or defined from star imports: src.db.factory
+    "E712", # Comparison to True should be 'if cond is True:' or 'if cond:'
+    "RET505", # superfluous-else-return (RET505)
+    "SIM102", # Use single if statement instead of nested
+    "RET504", # unneccessary assignment before return
+    "D102",   # Missing docstring in public class
+    "F401", # Imported but unused
+
+]
+
+lint.unfixable = [
+    "F401", # Imported but unused
+]
+
+exclude = [
+    "src/db/migrations/versions",
+    ".venv/",
+    "scripts/",
+    # "admin/test.ipynb",
+    "admin/",
+]
+
+# extend-include = ["*.ipynb"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/db/factory/*" = [
+    "S311",   # Use of standard pseudo-random generators
+    "RUF012", # Mutable class attributes should be annotated with `typing.ClassVar`
+    "SLF001", # Private member accessed
+    "S105",   # Possible hardcoded password
+]
+"tests/*" = [
+    "S101", # Use of assert detected
+    "S311", # Use of standard pseudo-random generators
+    "S105", # Possible hardcoded password
+    "S106", # Possible hardcoded password
+    "F841", # Local variable is assigned to but never used
+]
+"*/__init__.py" = [
+    "F401", # Imported but unused
+]
+"src/settings.py" = [
+    "N805", # First argument of a method should be named `self` (pydantic)
+]
+"*/dtos/*" = [
+    "N805", # First argument of a method should be named `self` (pydantic)
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+ignore-decorators = ["typing.overload"]
+
+[tool.ruff.lint.pylint]
+allow-magic-value-types = ["int", "str", "float", "bytes"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+exclude_lines = [
+    ".*# pragma: no cover",
+    "if __name__ == .__main__.:",
+    "self.logger",
+    "def __repr__",
+    "lambda: None",
+    "from .*",
+    "import .*",
+    '@(abc\.)?abstractmethod',
+    "raise NotImplementedError",
+    'raise AssertionError',
+    'raise ValueError',
+    'logger\..*',
+    "pass",
+    '\.\.\.',
+]
+omit = ['*/__about__.py', '*/__main__.py', '*/__init__.py', '*/annotations.py']

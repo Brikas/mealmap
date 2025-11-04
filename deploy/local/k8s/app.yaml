@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+    spec:
+      containers:
+      - name: myapp
+        image: myapp:dev
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: app-config
+      # Adding annotations for Promtail to scrape logs correctly
+      annotations:
+        promtail.io/scrape: "true"
+        promtail.io/path: "/var/log/myapp/*.log"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-service
+spec:
+  selector:
+    app: myapp
+  ports:
+  - protocol: TCP
+    port: 8000
+    targetPort: 8000

@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tempo
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tempo
+  template:
+    metadata:
+      labels:
+        app: tempo
+    spec:
+      containers:
+      - name: tempo
+        image: grafana/tempo:latest  # Consider pinning to a specific version
+        envFrom:
+        - configMapRef:
+            name: monitoring-config  # Ensure this contains necessary Tempo configurations
+        ports:
+        - containerPort: 3200  # Default port for Tempo's query frontend
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+        readinessProbe:  # Adding readiness probe
+          httpGet:
+            path: /ready
+            port: 3200
+          initialDelaySeconds: 15
+          timeoutSeconds: 3
+        livenessProbe:  # Adding liveness probe
+          httpGet:
+            path: /ready
+            port: 3200
+          initialDelaySeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 5
+      #   volumeMounts:  # Mounting a volume for storage
+      #   - name: tempo-storage
+      #     mountPath: /tempo
+      # volumes:  # Define an emptyDir volume
+      # - name: tempo-storage
+      #   emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tempo
+  namespace: monitoring
+spec:
+  selector:
+    app: tempo
+  ports:
+    - protocol: TCP
+      port: 3200
+      targetPort: 3200

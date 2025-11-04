@@ -1,0 +1,13 @@
+# For local development
+services:
+  api:
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      SRC_API_RELOAD: "True"
+
+  db:
+    ports:
+      - "5432:5432"

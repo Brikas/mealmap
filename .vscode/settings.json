@@ -1,0 +1,38 @@
+{
+  "python.formatting.provider": "black",
+  "typescript.formatting.provider": "prettier",
+  "editor.rulers": [88],
+  "editor.formatOnSave": true,
+  "editor.stickyScroll.enabled": true,
+  "python.analysis.typeCheckingMode": "basic", // strict, basic, off
+  "python.linting.enabled": true,
+  "typescript.updateImportsOnFileMove.enabled": "always",
+  "typescript.autoClosingTags": true,
+  "python.linting.flake8Enabled": true,
+  "python.linting.mypyEnabled": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit",
+    "source.fixAll": "explicit",
+    "eslint.autoFixOnSave": "explicit"
+  },
+  "notebook.formatOnSave.enabled": true,
+  "notebook.codeActionsOnSave": {
+    "notebook.source.fixAll": "explicit",
+    "notebook.source.organizeImports": "explicit"
+
+  },
+  "[python]": {
+      "editor.formatOnSave": true,
+      "editor.codeActionsOnSave": {
+        "source.fixAll": "explicit",
+        "source.organizeImports": "explicit"
+      },
+      "editor.defaultFormatter": "charliermarsh.ruff"
+    },
+  "eslint.validate": [
+      "javascript",
+      "javascriptreact",
+      "typescript",
+      "typescriptreact",
+  ],
+}
