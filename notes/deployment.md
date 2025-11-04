@@ -9,8 +9,11 @@
 
 ## Setup
 
+### [MacOS](local_setup_macos)
+
 ### Windows
 
+Install Python 3.11
 Install `make`
 You can use [Chocolatey](https://chocolatey.org/install)
 Run PowerShell as administrator ->

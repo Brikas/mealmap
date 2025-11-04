@@ -26,19 +26,13 @@ class User(Base):
     email: Mapped[Optional[str]] = mapped_column(
         String, unique=True, index=True, nullable=True
     )
-    phone_number: Mapped[Optional[str]] = mapped_column(
-        String, unique=True, index=True, nullable=True
-    )  # New: allow signup with phone
+
     hashed_password: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     first_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     last_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     image_path: Mapped[Optional[str]] = mapped_column(
-        String, nullable=True
-    )  # Example: Used for testing purposes
-
-    instagram: Mapped[Optional[str]] = mapped_column(
         String, nullable=True
     )  # Example: Used for testing purposes
 
@@ -56,21 +50,6 @@ class User(Base):
     # New field for JWT invalidation support
     token_version: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="1"
-    )
-
-    # Relationships
-    items = relationship("Item", back_populates="owner", passive_deletes=True)
-    # TODO Check if I need the passive_deletes=True here
-
-    # group_memberships = relationship("GroupMembers", back_populates="user")
-    group_memberships = relationship(
-        "GroupMembers",
-        foreign_keys=lambda: [
-            GroupMembers.user_id
-        ],  # Use lambda to avoid circular import issues. Typecheking.
-        back_populates="user",
-        cascade="all, delete-orphan",  # This ensures proper cascade behavior
-        passive_deletes=True,  # Let the database handle the CASCADE
     )
 
     @staticmethod
