@@ -24,7 +24,9 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000
 
 
-async def login_user(db, email: str, password: str) -> Optional[Dict[str, str]]:
+async def login_user(
+    db: AsyncSession, email: str, password: str
+) -> Optional[Dict[str, str]]:
     """
     Return {"access_token": access_token, "token_type": "bearer"}.
     """
@@ -52,7 +54,7 @@ def create_access_token(data: TokenCreationData) -> str:
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def decode_access_token(token: str):
+def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
     try:
         return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except jwt.PyJWTError:
@@ -87,7 +89,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 # TODO Refactor to login_email etc.
-async def _try_login_user(db, email: str, password: str) -> Optional[Any]:
+async def _try_login_user(db: AsyncSession, email: str, password: str) -> Optional[Any]:
     user = await dao.get_user_by_email(db, email)
     if (
         not user

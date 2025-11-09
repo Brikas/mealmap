@@ -16,7 +16,7 @@ async def get_user_by_email(db: AsyncSession, email: str) -> Optional[User]:
 
 async def create_user(
     db: AsyncSession, email: str, hashed_password: str, test_id: Optional[str] = None
-):
+) -> User:
     user = User(email=email, hashed_password=hashed_password, test_id=test_id)
     db.add(user)
     await db.commit()
@@ -24,7 +24,7 @@ async def create_user(
     return user
 
 
-async def join_user(db: AsyncSession, user: User, hashed_password: str):
+async def join_user(db: AsyncSession, user: User, hashed_password: str) -> User:
     user.is_joined = True
     user.hashed_password = hashed_password
 

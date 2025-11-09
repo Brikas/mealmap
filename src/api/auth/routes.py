@@ -14,14 +14,13 @@ from fastapi import (
 from fastapi.concurrency import run_in_threadpool
 from fastapi.security import OAuth2PasswordRequestForm  # Import
 from loguru import logger
+from sqlalchemy import UUID, String, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.auth import dao
 from src.api.auth.dao import create_user, join_user
-from src.api.auth.dto import *
-from src.api.auth.jwt_utils import create_access_token, get_password_hash, login_user
+from src.api.auth.dto import LoginResponse, TokenRequest, UserCreate
+from src.api.auth.jwt_utils import get_password_hash, login_user
 from src.api.dependencies import get_current_user
-from src.conf.settings import settings
 from src.db.models import User  # Import your models
 from src.db.session import get_async_db_session
 
@@ -33,8 +32,6 @@ router = APIRouter(tags=["auth"])
 #         send_welcome_email(email)  # Send email to new user
 #     except Exception as e:
 #         logger.warning(f"Failed to send welcome email: {e}")
-
-from sqlalchemy import UUID, String, select
 
 
 @router.post("/register", response_model=LoginResponse)
@@ -84,7 +81,7 @@ async def register(
 async def read_users_me(
     current_user: Annotated[User, Depends(get_current_user)],
     db: AsyncSession = Depends(get_async_db_session),  # You can remove if unused.
-):
+) -> User:
     # Now you have both the authenticated user and the database session
     return current_user
 

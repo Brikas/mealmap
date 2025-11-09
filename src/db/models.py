@@ -5,7 +5,8 @@ from typing import List, Optional
 import sqlalchemy as sa
 from passlib.context import CryptContext
 from sqlalchemy import Boolean, Column, Float, ForeignKey, Integer, String, event
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.engine import Connection
+from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from src.db.base import Base
@@ -53,7 +54,7 @@ class User(Base):
     )
 
     @staticmethod
-    def update_joined_at(target, connection):
+    def update_joined_at(target: "User", connection: Connection) -> None:
         """
         Sets the joined_at timestamp when is_joined becomes True.
         """
@@ -66,10 +67,14 @@ class User(Base):
 
 
 @event.listens_for(User, "after_insert")
-def set_joined_at_on_insert(mapper, connection, target):
+def set_joined_at_on_insert(
+    mapper: Mapper, connection: Connection, target: User
+) -> None:
     User.update_joined_at(target, connection)
 
 
 @event.listens_for(User, "after_update")
-def set_joined_at_on_update(mapper, connection, target):
+def set_joined_at_on_update(
+    mapper: Mapper, connection: Connection, target: User
+) -> None:
     User.update_joined_at(target, connection)
