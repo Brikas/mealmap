@@ -5,9 +5,9 @@ from loguru import logger
 from pydantic import Field, SecretStr
 from yarl import URL
 
-load_dotenv()  # Load environment variables from .env file
-
 from src.conf.base_settings import BaseSettings
+
+load_dotenv()  # Load environment variables from .env file
 
 PREFIX = ""
 

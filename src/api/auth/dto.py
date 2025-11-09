@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TokenData(BaseModel):
@@ -26,7 +26,7 @@ class UserLogin(BaseModel):
 
 class Token(BaseModel):
     access_token: str
-    token_type: str = "bearer"
+    token_type: str = Field(default_factory=lambda: "bearer")
 
 
 class UserCreate(BaseModel):

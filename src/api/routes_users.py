@@ -151,13 +151,19 @@ class UserProfileImageUpdate(BaseModel):
         if img.size is None:
             raise HTTPException(
                 status_code=400,
-                detail="File size could not be determined. Please ensure the file is valid.",
+                detail=(
+                    "File size could not be determined. "
+                    "Please ensure the file is valid."
+                ),
             )
 
         if img.size > max_size:
             raise HTTPException(
                 status_code=413,
-                detail=f"File size exceeds 5MB limit. Uploaded file size: {img.size / (1024 * 1024):.2f}MB",
+                detail=(
+                    "File size exceeds 5MB limit. "
+                    f"Uploaded file size: {img.size / (1024 * 1024):.2f}MB"
+                ),
             )
         return img
 
@@ -181,7 +187,7 @@ async def upload_profile_image(
 
     img_bytes = await image_data.image.read()
     try:
-        processed_image_bytes, metadata = await run_in_threadpool(
+        processed_image_bytes, _metadata = await run_in_threadpool(
             image_processing.process_image_to_jpeg_fill_center, img_bytes, (1024, 1024)
         )
 
@@ -313,7 +319,7 @@ async def delete_current_user(
 
     # Avoid FK violation on app_group.creator_id if present
     # await db.execute(
-    #     update(Group).where(Group.creator_id == current_user.id).values(creator_id=None)
+    #     update(Group).where(Group.creator_id == current_user.id).values(creator_id=None)  # noqa: E501
     # )
 
     # Delete the user (CASCADE will handle items, group_memberships, etc.)

@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, HTTPException, status
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +11,6 @@ from src.api.auth.jwt_utils import (
     oauth2_scheme,
     verify_token,  # Import verify_token
 )
-from src.conf.settings import settings
 from src.db.models import User
 from src.db.session import get_async_db_session  # Import session dependency
 
@@ -26,7 +25,7 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     token_data = await verify_token(token, db)
-    print("Token data in dependency:", token_data)
+    logger.info("Token data in dependency:", token_data)
     if token_data is None:
         raise credentials_exception
 
