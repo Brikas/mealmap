@@ -10,7 +10,6 @@ from mypy_boto3_s3 import S3Client
 
 from src.conf.settings import settings
 
-# LARS: Can I keep this root level?
 s3_client: S3Client = boto3.client(
     "s3",  # type: ignore
     region_name=settings.AWS_REGION_NAME,
