@@ -13,7 +13,6 @@ The back-end API for ITEMS marketplace app.
 -   Docker (or Kuberneter)
 -   pydantic
 -   S3 storage
--   MessageBird (SMS)
 
 # First time setup
 
@@ -21,6 +20,7 @@ The back-end API for ITEMS marketplace app.
 
 -   Install `nbstripout` for jupyter notebook commit output stripping.
 -   Copy `.env.example` to `.env` and fill out values.
+
 
 ## [Run](notes/deployment.md)
 

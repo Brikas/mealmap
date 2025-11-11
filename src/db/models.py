@@ -43,38 +43,7 @@ class User(Base):
 
     test_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
-    # If None, the user has only been invired, but never signed up
-    joined_at: Mapped[Optional[float]] = mapped_column(sa.Float, nullable=True)
-
-    is_joined: Mapped[bool] = mapped_column(Boolean, default=True)
-
     # New field for JWT invalidation support
     token_version: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="1"
     )
-
-    @staticmethod
-    def update_joined_at(target: "User", connection: Connection) -> None:
-        """
-        Sets the joined_at timestamp when is_joined becomes True.
-        """
-        if target.is_joined and target.joined_at is None:
-            connection.execute(
-                sa.update(User)
-                .where(User.id == target.id)
-                .values(joined_at=func.extract("epoch", func.now()))
-            )
-
-
-@event.listens_for(User, "after_insert")
-def set_joined_at_on_insert(
-    mapper: Mapper, connection: Connection, target: User
-) -> None:
-    User.update_joined_at(target, connection)
-
-
-@event.listens_for(User, "after_update")
-def set_joined_at_on_update(
-    mapper: Mapper, connection: Connection, target: User
-) -> None:
-    User.update_joined_at(target, connection)

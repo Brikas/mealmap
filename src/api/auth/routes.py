@@ -47,23 +47,17 @@ async def register(
         select(User).where(User.email == user_create.email)
     )
     user = existing_user.scalars().first()
-    is_invited_user_signup = False
     if user:
-        is_invited_user_signup = True
-        if user.is_joined:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User already exists",
-            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User already exists",
+        )
 
     # Create new user
     hashed_password = get_password_hash(user_create.password)
-    if is_invited_user_signup:
-        new_user = await join_user(db, user, hashed_password)  # type: ignore
-    else:
-        new_user = await create_user(
-            db, user_create.email, hashed_password, test_id=user_create.test_id
-        )
+    new_user = await create_user(
+        db, user_create.email, hashed_password, test_id=user_create.test_id
+    )
 
     # Get token
     token_data = await login_user(db, user_create.email, user_create.password)
@@ -73,16 +67,14 @@ async def register(
     return LoginResponse(
         access_token=token_data["access_token"],
         user_id=str(new_user.id),
-        is_invited_user_signup=is_invited_user_signup,
     )
 
 
 @router.get("/users/me")
-async def read_users_me(
+async def read_users_me(  # noqa: ANN201
     current_user: Annotated[User, Depends(get_current_user)],
-    db: AsyncSession = Depends(get_async_db_session),  # You can remove if unused.
-) -> User:
-    # Now you have both the authenticated user and the database session
+    db: AsyncSession = Depends(get_async_db_session),
+):
     return current_user
 
 

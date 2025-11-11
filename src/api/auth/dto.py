@@ -32,7 +32,6 @@ class Token(BaseModel):
 class UserCreate(BaseModel):
     email: str
     password: str
-    send_email: Optional[bool] = False
     test_id: Optional[str] = None  # Optional field for testing purposes
 
 
@@ -44,4 +43,3 @@ class TokenRequest(BaseModel):  # New Pydantic model
 class LoginResponse(BaseModel):
     access_token: str
     user_id: str
-    is_invited_user_signup: Optional[bool] = False

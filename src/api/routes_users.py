@@ -49,12 +49,6 @@ class UserResponse(BaseModel):
     test_id: Optional[str] = None
 
 
-class UserDetailedResponse(UserResponse):
-    """Detailed user response including all fields."""
-
-    joined_at: Optional[float]
-
-
 class UserUpdate(BaseModel):
     """Data transfer object for updating user information."""
 
@@ -88,7 +82,6 @@ async def search_users(
             | (func.concat(User.first_name, " ", User.last_name).ilike(f"%{q}%"))
         )
         & (User.id != current_user.id)
-        & (User.is_joined == True)
     )
     page_obj = await paginate(
         query, db, page=pagination.page, page_size=pagination.page_size
@@ -115,12 +108,12 @@ async def search_users(
     )
 
 
-@router.get("/users/{user_id}", response_model=UserDetailedResponse)
+@router.get("/users/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: uuid.UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     db: AsyncSession = Depends(get_async_db_session),
-) -> UserDetailedResponse:
+) -> UserResponse:
     """
     Get user details by ID.
     """
@@ -130,14 +123,13 @@ async def get_user(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
 
-    return UserDetailedResponse(
+    return UserResponse(
         id=user.id,
         email=user.email,
         first_name=user.first_name,
         last_name=user.last_name,
         image_url=storage.generate_presigned_url_or_none(user.image_path),
         test_id=getattr(user, "test_id", None),
-        joined_at=user.joined_at or None,
     )
 
 
