@@ -42,7 +42,50 @@ class Page(BaseModel, Generic[T]):
     )
 
 
-async def paginate(
+async def paginate_list(
+    items: List[T],
+    page: int = 1,
+    page_size: int = 20,
+) -> Page[T]:
+    """
+    Paginate a list of items.
+
+    This is useful for paginating in-memory lists when database queries are not involved.
+    """
+
+    total_items = len(items)
+    total_pages = (total_items + page_size - 1) // page_size if page_size else 1
+    current_page = min(page, total_pages) if total_pages > 0 else 1
+    offset = (current_page - 1) * page_size
+
+    # If requested page exceeds total_pages, return empty results
+    if page > total_pages:
+        return Page(
+            results=[],
+            total_items=total_items,
+            start_index=0,
+            end_index=0,
+            total_pages=total_pages,
+            current_page=page,
+            current_page_size=0,
+        )
+
+    paginated_items = items[offset : offset + page_size]
+
+    start_index = offset + 1 if total_items > 0 else 0
+    end_index = offset + len(paginated_items)
+    return Page(
+        results=paginated_items,
+        total_items=total_items,
+        start_index=start_index,
+        end_index=end_index,
+        total_pages=total_pages,
+        current_page=current_page,
+        current_page_size=len(paginated_items),
+    )
+
+
+async def paginate_query(
     # TODO Investigate, how can I have type hinting on the returned results.
     query,
     db: AsyncSession,

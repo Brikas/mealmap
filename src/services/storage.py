@@ -15,14 +15,16 @@ s3_client: S3Client = boto3.client(
     region_name=settings.AWS_REGION_NAME,
     aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
     aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+    # 2025-11-12 I don't know why but for ap.northeast-2, this is needed.
+    endpoint_url=f"https://s3.{settings.AWS_REGION_NAME}.amazonaws.com",
 )
 
 
 class ObjectDescriptor(str, Enum):
     """Enum for object descriptors."""
 
-    IMAGE_GROUP = "image_group"
-    IMAGE_ITEM = "image_item"
+    IMAGE_MEAL = "image_meal"
+    IMAGE_PLACE = "image_place"
     IMAGE_USER_PROFILE = "image_user_profile"
     IMAGE_OTHER = "image_other"
 
@@ -38,10 +40,10 @@ def generate_image_object_name(
         :12
     ]  # 8-character random stringExtract the filename and extension
 
-    if descriptor == ObjectDescriptor.IMAGE_ITEM:
-        descriptor_str = "item"
-    elif descriptor == ObjectDescriptor.IMAGE_GROUP:
-        descriptor_str = "group"
+    if descriptor == ObjectDescriptor.IMAGE_MEAL:
+        descriptor_str = "meal"
+    elif descriptor == ObjectDescriptor.IMAGE_PLACE:
+        descriptor_str = "place"
     elif descriptor == ObjectDescriptor.IMAGE_USER_PROFILE:
         descriptor_str = "profile"
     elif descriptor == ObjectDescriptor.IMAGE_OTHER:

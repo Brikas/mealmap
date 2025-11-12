@@ -80,7 +80,6 @@ async def read_users_me(  # noqa: ANN201
 
 @router.post("/token")
 async def login_for_access_token(
-    # form_data: Annotated[OAuth2PasswordRequestForm, Depends()], # Removed
     request_data: TokenRequest,  # Use the Pydantic model
     db: AsyncSession = Depends(get_async_db_session),
 ) -> LoginResponse:
@@ -93,20 +92,25 @@ async def login_for_access_token(
         )
     return LoginResponse(
         access_token=token_data["access_token"],
-        user_id=str(token_data["user_id"]),  # Assuming you want to return the user ID
+        user_id=str(token_data["user_id"]),
     )
 
 
-# @router.post("/token-docs", response_model=Token)
-# async def login_for_access_token(
-#     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-#     db: AsyncSession = Depends(get_async_db_session),
-# ):  # Reverted to form data
-#     token_data = await login_user(db, form_data.email, form_data.password)
-#     if not token_data:
-#         raise HTTPException(
-#             status_code=status.HTTP_401_UNAUTHORIZED,
-#             detail="Incorrect email or password",
-#             headers={"WWW-Authenticate": "Bearer"},
-#         )
-#     return token_data
+@router.post("/token-docs", response_model=LoginResponse)
+async def login_for_access_token_docs(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: AsyncSession = Depends(get_async_db_session),
+) -> LoginResponse:
+    """Login endpoint for Swagger UI docs - uses OAuth2PasswordRequestForm."""
+    # OAuth2PasswordRequestForm uses 'username' field, map it to email
+    token_data = await login_user(db, form_data.username, form_data.password)
+    if not token_data:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return LoginResponse(
+        access_token=token_data["access_token"],
+        user_id=str(token_data["user_id"]),
+    )

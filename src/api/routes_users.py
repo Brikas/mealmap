@@ -31,7 +31,7 @@ from src.api.dependencies import get_current_user
 from src.db.models import User
 from src.db.session import get_async_db_session
 from src.services import image_processing, storage
-from src.utils.pagination import Page, PaginationInput, paginate
+from src.utils.pagination import Page, PaginationInput, paginate_query
 
 router = APIRouter()
 
@@ -79,7 +79,7 @@ async def search_users(
         )
         & (User.id != current_user.id)
     )
-    page_obj = await paginate(
+    page_obj = await paginate_query(
         query, db, page=pagination.page, page_size=pagination.page_size
     )
     results = [
