@@ -124,6 +124,8 @@ class Place(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     address: Mapped[str] = mapped_column(String, nullable=False)
 
+    test_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
     # --- Relationships ---
     images: Mapped[List[PlaceImage]] = relationship(
         back_populates="place", cascade="all, delete-orphan"
@@ -131,6 +133,15 @@ class Place(Base):
     meal_reviews: Mapped[List["MealReview"]] = relationship(
         back_populates="place", cascade="all, delete-orphan"
     )
+
+
+class TriState(str, Enum):
+    yes = "yes"
+    no = "no"
+    unspecified = "unspecified"
+
+
+TriStateEnum = SQLEnum(TriState, name="tri_state_enum")
 
 
 class MealReview(Base):
@@ -154,44 +165,32 @@ class MealReview(Base):
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
     text: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     waiting_time_minutes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    price: Mapped[float] = mapped_column(Float, nullable=False)
+    price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Enums
-    is_vegan: Mapped[str] = mapped_column(
-        SQLEnum("no", "not specified", "yes", name="vegan_status_enum"),
-        nullable=False,
-        server_default="not specified",
+    is_vegan: Mapped[TriState] = mapped_column(
+        TriStateEnum, nullable=False, server_default=TriState.unspecified.value
     )
-    is_halal: Mapped[str] = mapped_column(
-        SQLEnum("no", "not specified", "yes", name="halal_status_enum"),
-        nullable=False,
-        server_default="not specified",
+    is_halal: Mapped[TriState] = mapped_column(
+        TriStateEnum, nullable=False, server_default=TriState.unspecified.value
     )
-    is_vegetarian: Mapped[str] = mapped_column(
-        SQLEnum("no", "not specified", "yes", name="vegetarian_status_enum"),
-        nullable=False,
-        server_default="not specified",
+    is_vegetarian: Mapped[TriState] = mapped_column(
+        TriStateEnum, nullable=False, server_default=TriState.unspecified.value
     )
-    is_spicy: Mapped[str] = mapped_column(
-        SQLEnum("no", "not specified", "yes", name="spicy_status_enum"),
-        nullable=False,
-        server_default="not specified",
+    is_spicy: Mapped[TriState] = mapped_column(
+        TriStateEnum, nullable=False, server_default=TriState.unspecified.value
     )
-    is_gluten_free: Mapped[str] = mapped_column(
-        SQLEnum("no", "not specified", "yes", name="gluten_free_status_enum"),
-        nullable=False,
-        server_default="not specified",
+    is_gluten_free: Mapped[TriState] = mapped_column(
+        TriStateEnum, nullable=False, server_default=TriState.unspecified.value
     )
-    is_dairy_free: Mapped[str] = mapped_column(
-        SQLEnum("no", "not specified", "yes", name="dairy_free_status_enum"),
-        nullable=False,
-        server_default="not specified",
+    is_dairy_free: Mapped[TriState] = mapped_column(
+        TriStateEnum, nullable=False, server_default=TriState.unspecified.value
     )
-    is_nut_free: Mapped[str] = mapped_column(
-        SQLEnum("no", "not specified", "yes", name="nut_free_status_enum"),
-        nullable=False,
-        server_default="not specified",
+    is_nut_free: Mapped[TriState] = mapped_column(
+        TriStateEnum, nullable=False, server_default=TriState.unspecified.value
     )
+
+    test_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     # --- Relationships ---
     user: Mapped["User"] = relationship(back_populates="meal_reviews")
@@ -205,6 +204,11 @@ class MealReview(Base):
 
     __table_args__ = (
         CheckConstraint("rating >= 1 AND rating <= 5", name="check_rating_range"),
+        CheckConstraint(
+            "waiting_time_minutes >= 0", name="check_waiting_time_non_negative"
+        ),
+        CheckConstraint("price >= 0", name="check_price_non_negative"),
+        CheckConstraint("price <= 10000000", name="check_price_max_value"),
     )
 
 
@@ -228,6 +232,8 @@ class Swipe(Base):
         sa.UUID(as_uuid=True), nullable=False, index=True
     )
     liked: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+    test_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     # --- Relationships ---
     user: Mapped["User"] = relationship(back_populates="swipes")

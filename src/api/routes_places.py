@@ -31,6 +31,7 @@ from src.api.dependencies import get_current_user
 from src.db.models import Place, PlaceImage, User
 from src.db.session import get_async_db_session
 from src.services import image_processing, storage
+from src.utils.misc_utils import calculate_distance
 from src.utils.pagination import Page, PaginationInput, paginate_list
 
 router = APIRouter()
@@ -46,6 +47,7 @@ class PlaceResponse(BaseModel):
     longitude: Optional[float] = None
     average_rating: Optional[float] = None
     review_count: Optional[int] = None
+    test_id: Optional[str] = None
 
 
 class PlaceResponseDetailed(PlaceResponse):
@@ -59,46 +61,13 @@ class PlaceResponseDetailed(PlaceResponse):
     images: List[BackendImageResponse] = []
 
 
-class PlaceCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=200)
-    address: Optional[str] = Field(None, max_length=500)
-    latitude: float = Field(..., ge=-90, le=90)
-    longitude: float = Field(..., ge=-180, le=180)
-    images: List[UploadFile] = Field(
-        default_factory=list, max_length=5, description="Max 5 images, each max 5MB"
-    )
-
-
-class PlaceUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=200)
-    address: Optional[str] = Field(None, max_length=500)
-    add_images: Optional[List[UploadFile]] = Field(default_factory=list, max_length=5)
-    remove_image_ids: Optional[List[uuid.UUID]] = Field(default_factory=list)
-
-
-def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calculate distance between two coordinates using Haversine formula (in meters)."""
-    R = 6371000  # Earth's radius in meters
-    phi1 = math.radians(lat1)
-    phi2 = math.radians(lat2)
-    delta_phi = math.radians(lat2 - lat1)
-    delta_lambda = math.radians(lon2 - lon1)
-
-    a = (
-        math.sin(delta_phi / 2) ** 2
-        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
-    )
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-    return R * c
-
-
 @router.post("/places", response_model=ObjectCreationResponse)
 async def create_place(
     name: Annotated[str, Form()],
     latitude: Annotated[float, Form()],
     longitude: Annotated[float, Form()],
     address: Annotated[Optional[str], Form()] = None,
+    test_id: Annotated[Optional[str], Form()] = None,
     images: List[UploadFile] = [],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db_session),
@@ -131,6 +100,7 @@ async def create_place(
         address=address or "",
         lat=latitude,
         lng=longitude,
+        test_id=test_id,
     )
     db.add(new_place)
     await db.flush()  # Get new_place.id
@@ -261,6 +231,7 @@ async def list_places(
                 longitude=place.lng,
                 average_rating=item["avg_rating"],
                 review_count=item["review_count"],
+                test_id=place.test_id,
             )
         )
 
@@ -343,6 +314,7 @@ async def get_place_details(
         created_at=place.created_at.isoformat(),
         updated_at=place.updated_at.isoformat(),
         images=backend_images,
+        test_id=place.test_id,
     )
 
 
@@ -352,6 +324,7 @@ async def update_place(
     name: Annotated[Optional[str], Form()] = None,
     address: Annotated[Optional[str], Form()] = None,
     add_images: List[UploadFile] = [],
+    test_id: Annotated[Optional[str], Form()] = None,
     remove_image_ids: Annotated[Optional[str], Form()] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db_session),
@@ -384,6 +357,10 @@ async def update_place(
         elif address != place.address:
             approval_needed.append("address edit")
             # Don't apply the change yet
+
+    if test_id is not None:
+        # Directly allow test_id updates
+        place.test_id = test_id
 
     # Handle image additions (allowed instantly)
     if add_images:

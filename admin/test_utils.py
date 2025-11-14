@@ -50,18 +50,6 @@ def get_user_from_id(user_id: str, users: list) -> dict:
     raise ValueError(f"User with id {user_id} not found")
 
 
-def get_group_from_id(group_id: str, groups: list) -> dict:
-    for group in groups:
-        if group["id"] == group_id:
-            return group
-    raise ValueError(f"Group with id {group_id} not found")
-
-
-def get_group_from_test_id(test_id: str, groups: list) -> dict:
-    for group in groups:
-        if group["test_id"] == test_id:
-            return group
-    raise ValueError(f"Group with test_id {test_id} not found")
 
 
 def encode_base64_image_or_none(image_path: str | None) -> str | None:
@@ -88,48 +76,88 @@ def get_user_from_action_caller(
     else:
         raise ValueError("Action caller must have either email or phone_number")
 
-def group_exists(query_group, group_list) -> bool:
-    for g in group_list:
-        if 'test_id' in query_group and 'test_id' in g and query_group['test_id'] == g['test_id']:
-            return True
-        if 'id' in query_group and 'id' in g and query_group['id'] == g['id']:
-            return True
-    return False
 
-def item_exists(query_item, item_list) -> bool:
-    for item in item_list:
-        if 'test_id' in query_item and 'test_id' in item and query_item['test_id'] == item['test_id']:
-            return True
-        if 'id' in query_item and 'id' in item and query_item['id'] == item['id']:
-            return True
-    return False
+def find_object_by_identifier(obj_data: dict, obj_list: list, identifier_key: str = 'test_id') -> dict | None:
+    """
+    Finds an existing object in obj_list by identifier.
 
-def get_item_from_test_id(test_id: str, items: list) -> dict:
-    for item in items:
-        if item["test_id"] == test_id:
-            return item
-    raise ValueError(f"Item with test_id {test_id} not found")
+    Tries primary identifier first, then falls back to 'id'.
 
-def get_item_from_id(item_id: str, items: list) -> dict:
-    for item in items:
-        if item["id"] == item_id:
-            return item
-    raise ValueError(f"Item with id {item_id} not found")
+    Args:
+        obj_data: The object data to search for
+        obj_list: The list of objects to search in
+        identifier_key: Primary identifier to search by ('test_id' or 'id')
 
-def get_user_that_owns_item_with_test_id(
-    item_test_id: str, items: list, users: list
-    ) -> dict:
-    item = get_item_from_test_id(item_test_id, items)
+    Returns:
+        The matched object reference or None if not found
+    """
+    # Try to find by primary identifier
+    if identifier_key in obj_data:
+        for obj in obj_list:
+            if identifier_key in obj and obj[identifier_key] == obj_data[identifier_key]:
+                return obj
 
-    if "owner" not in item:
-        raise ValueError(f"Item with test_id {item_test_id} does not have an owner field")
+    # If not found by primary identifier, try by 'id' as fallback
+    if identifier_key != 'id' and 'id' in obj_data:
+        for obj in obj_list:
+            if 'id' in obj and obj['id'] == obj_data['id']:
+                return obj
 
-    owner_object = item["owner"]
-    if "id" not in owner_object:
-        raise ValueError(f"Owner object of item with test_id {item_test_id} does not have an id field")
+    return None
 
-    owner_id = owner_object["id"]
-    for user in users:
-        if user["id"] == owner_id:
-            return user
-    raise ValueError(f"User with id {owner_id} not found in users list")
+
+def update_or_add_object(obj_data: dict, obj_list: list, identifier_key: str = 'test_id') -> tuple[dict, bool]:
+    """
+    Updates an existing object in obj_list or adds it if not found.
+
+    Uses 'id' as a fallback identifier if the primary identifier is not found.
+
+    Args:
+        obj_data: The object data to update or add
+        obj_list: The list of objects to search in
+        identifier_key: Primary identifier to search by ('test_id' or 'id')
+
+    Returns:
+        tuple: (updated/added object reference, was_added: bool)
+    """
+    existing_obj = find_object_by_identifier(obj_data, obj_list, identifier_key)
+
+    if existing_obj:
+        # Update existing object
+        existing_obj.update(obj_data)
+        return existing_obj, False
+    else:
+        # Not found, add new object
+        obj_list.append(obj_data)
+        return obj_data, True
+
+
+def get_user_that_owns_review_with_test_id(review_test_id: str, reviews: list, users: list) -> dict:
+    """Get the user who created/owns a specific review by test_id."""
+    review = get_review_from_test_id(review_test_id, reviews)
+
+    # Try to get user from the 'user' object first (from API response)
+    if "user" in review and "id" in review["user"]:
+        return get_user_from_id(review["user"]["id"], users)
+
+    # Fallback to action_caller if user object not present (initial setup)
+    if "action_caller" in review:
+        action_caller = review["action_caller"]
+        if "email" in action_caller:
+            return get_user_from_email(action_caller["email"], users)
+
+    raise ValueError(f"Review with test_id {review_test_id} does not have user information")
+
+def get_review_from_id(review_id: str, reviews: list) -> dict:
+    """Get a review by its id."""
+    for review in reviews:
+        if review.get("id") == review_id:
+            return review
+    raise ValueError(f"Review with id {review_id} not found")
+
+def get_review_from_test_id(test_id: str, reviews: list) -> dict:
+    """Get a review by its test_id."""
+    for review in reviews:
+        if review.get("test_id") == test_id:
+            return review
+    raise ValueError(f"Review with test_id {test_id} not found")
