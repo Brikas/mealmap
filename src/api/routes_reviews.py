@@ -89,7 +89,9 @@ class ReviewResponse(BaseModel):
 
 
 class ReviewDetailedResponse(ReviewResponse):
-    images: List[BackendImageResponse] = []
+    images: List[BackendImageResponse] = Field(
+        default_factory=list, description="All review images"
+    )
     updated_at: str
 
 
