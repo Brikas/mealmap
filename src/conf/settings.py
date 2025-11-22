@@ -32,7 +32,6 @@ class DatabaseConfig(BaseSettings):
     """Database configuration parameters."""
 
     sqlitedb_path: str = Field(default="", description="SQLite file path.")
-    postgres_host: str = Field(default="localhost:5432", description="PostgreSQL host.")
     host: str = Field(default="localhost", description="PostgreSQL host.")
     port: int = Field(default=5432, description="PostgreSQL host.")
     # LOCAL: Alternatively use docker-compose container name
@@ -57,6 +56,8 @@ class DatabaseConfig(BaseSettings):
         )
 
     class Config:
+        # Pydantic automatically combines the env_prefix (DB_) with the field
+        #  name (host) and converts it to uppercase. DB_ + host -> DB_HOST
         env_prefix = f"{PREFIX}DB_"
 
 
@@ -69,7 +70,6 @@ class Settings(BaseSettings):
     debug: bool = False
     ignore_db: bool = False
     secret_key: str = "some-secret-key"  # TODO: SecretStr type
-    admin_api_key: str | None = os.environ.get("ADMIN_API_KEY")
 
     AWS_ACCESS_KEY_ID: str | None = os.environ.get("AWS_ACCESS_KEY_ID")
     AWS_SECRET_ACCESS_KEY: str | None = os.environ.get("AWS_SECRET_ACCESS_KEY")
@@ -90,7 +90,7 @@ class Settings(BaseSettings):
     logger.info(
         "Database URL: "
         f"{database.postgres_user}:<PASSWORD>@"
-        f"{database.postgres_host}/{database.postgres_database}"
+        f"{database.host}:{database.port}/{database.postgres_database}"
     )
 
     @property
@@ -98,9 +98,8 @@ class Settings(BaseSettings):
         """Constructs SQLAlchemy URL based on database configuration."""
         if self.database.sqlitedb_path:
             return f"sqlite+aiosqlite:///{self.database.sqlitedb_path}"
-        if self.database.postgres_host:
-            password = self.database.postgres_password.get_secret_value()
-            return f"postgresql+asyncpg://{self.database.postgres_user}:{password}@{self.database.postgres_host}/{self.database.postgres_database}"
+        if self.database.host:
+            return str(self.database.url)
         return ""
 
     @property
@@ -108,9 +107,9 @@ class Settings(BaseSettings):
         """Constructs SQLAlchemy URL based on database configuration."""
         if self.database.sqlitedb_path:
             return f"sqlite:///{self.database.sqlitedb_path}"
-        if self.database.postgres_host:
+        if self.database.host:
             password = self.database.postgres_password.get_secret_value()
-            return f"postgresql://{self.database.postgres_user}:{password}@{self.database.postgres_host}/{self.database.postgres_database}"
+            return f"postgresql://{self.database.postgres_user}:{password}@{self.database.host}:{self.database.port}/{self.database.postgres_database}"
         return ""
 
     @property
@@ -118,8 +117,8 @@ class Settings(BaseSettings):
         """Constructs SQLAlchemy URL based on database configuration."""
         if self.database.sqlitedb_path:
             return f"sqlite+aiosqlite:///{self.database.sqlitedb_path}"
-        if self.database.postgres_host:
-            return f"postgresql+asyncpg://{self.database.postgres_user}:<PASSWORD>@{self.database.postgres_host}/{self.database.postgres_database}"
+        if self.database.host:
+            return f"postgresql+asyncpg://{self.database.postgres_user}:<PASSWORD>@{self.database.host}:{self.database.port}/{self.database.postgres_database}"
         return ""
 
     @property
@@ -127,8 +126,8 @@ class Settings(BaseSettings):
         """Constructs SQLAlchemy URL based on database configuration."""
         if self.database.sqlitedb_path:
             return f"sqlite:///{self.database.sqlitedb_path}"
-        if self.database.postgres_host:
-            return f"postgresql://{self.database.postgres_user}:<PASSWORD>@{self.database.postgres_host}/{self.database.postgres_database}"
+        if self.database.host:
+            return f"postgresql://{self.database.postgres_user}:<PASSWORD>@{self.database.host}:{self.database.port}/{self.database.postgres_database}"
         return ""
 
 
