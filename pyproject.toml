@@ -26,6 +26,8 @@ faker = "^37.0.2"
 boto3 = "^1.37.31"
 boto3-stubs = {extras = ["s3"], version = "^1.37.31"}
 greenlet = "^3.2.4"
+scikit-learn = "^1.7.2"
+numpy = "^2.3.5"
 
 [tool.poetry.group.env-printer.dependencies]
 pydantic = "^2.1.1"
@@ -68,6 +70,9 @@ psycopg2-binary = "^2.9.3"
 pandas = "^2.2.2"
 matplotlib = "^3.9.1"
 pytest-benchmark = "^4.0.0"
+ipykernel = "^6.29.0"
+ipython = "^8.22.0"
+jupyter = "^1.0.0"
 
 [tool.isort]
 profile = "black"

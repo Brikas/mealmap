@@ -28,10 +28,16 @@ from sqlalchemy.orm import selectinload
 
 from src.api.auth import jwt_utils
 from src.api.dependencies import get_current_user
-from src.db.models import User
+from src.db.models import User, MealReview, Place, MealReviewImage
 from src.db.session import get_async_db_session
 from src.services import image_processing, storage
+from src.services.recommendation import RecommendationService
 from src.utils.pagination import Page, PaginationInput, paginate_query
+from src.api.common_schemas import BackendImageResponse
+
+# Import schemas from reviews route (assuming no circular dependency issues for schemas)
+# If this fails, we might need to move schemas to common_schemas.py
+from src.api.routes_reviews import ReviewResponse, PlaceBasicInfo, UserBasicInfo
 
 router = APIRouter()
 
@@ -302,6 +308,7 @@ async def delete_current_user(
         )
 
     # Add user profile image if exists
+    s3_path_to_delete = None
     if user.image_path:
         s3_path_to_delete = user.image_path
 
@@ -351,3 +358,84 @@ async def change_password(
     await db.commit()
     await db.refresh(user)
     # Optionally: send notification email here
+
+
+@router.get("/users/me/feed", response_model=List[ReviewResponse])
+async def get_my_feed(
+    limit: int = Query(10, ge=1, le=50),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_async_db_session),
+) -> List[ReviewResponse]:
+    """
+    Get personalized meal feed for the current user.
+    """
+    service = RecommendationService(db)
+    reviews = await service.get_user_feed(current_user.id, limit=limit)
+    
+    results = []
+    for review in reviews:
+        place = review.place
+        user = review.user
+
+        # Get first image
+        first_review_image = None
+        image_count = len(review.images)
+        if review.images:
+            sorted_images = sorted(review.images, key=lambda i: i.sequence_index)
+            first_review_image = BackendImageResponse(
+                id=sorted_images[0].id,
+                image_url=storage.generate_presigned_url(sorted_images[0].image_path),
+                sequence_index=sorted_images[0].sequence_index,
+            )
+
+        # Get first place image
+        first_place_image = None
+        if place.images:
+            sorted_place_images = sorted(place.images, key=lambda i: i.sequence_index)
+            first_place_image = BackendImageResponse(
+                id=sorted_place_images[0].id,
+                image_url=storage.generate_presigned_url(
+                    sorted_place_images[0].image_path
+                ),
+                sequence_index=sorted_place_images[0].sequence_index,
+            )
+
+        results.append(
+            ReviewResponse(
+                id=review.id,
+                meal_name=review.meal_name,
+                rating=review.rating,
+                text=review.text,
+                waiting_time_minutes=review.waiting_time_minutes,
+                price=review.price,
+                test_id=review.test_id,
+                is_vegan=review.is_vegan.value,
+                is_halal=review.is_halal.value,
+                is_vegetarian=review.is_vegetarian.value,
+                is_spicy=review.is_spicy.value,
+                is_gluten_free=review.is_gluten_free.value,
+                is_dairy_free=review.is_dairy_free.value,
+                is_nut_free=review.is_nut_free.value,
+                image_count=image_count,
+                first_image=first_review_image,
+                place=PlaceBasicInfo(
+                    id=place.id,
+                    name=place.name,
+                    address=place.address,
+                    latitude=place.lat,
+                    longitude=place.lng,
+                    first_image=first_place_image,
+                ),
+                user=UserBasicInfo(
+                    id=user.id,
+                    first_name=user.first_name,
+                    last_name=user.last_name,
+                    image_url=storage.generate_presigned_url_or_none(user.image_path),
+                ),
+                created_at=review.created_at.isoformat(),
+                # distance is None for feed
+                distance_meters=None,
+            )
+        )
+    
+    return results

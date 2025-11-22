@@ -107,6 +107,9 @@ class User(Base):
     swipes: Mapped[List["Swipe"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    feed_items: Mapped[List["UserFeedItem"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class Place(Base):
@@ -246,4 +249,28 @@ class Swipe(Base):
             "session_id",
             name="unique_user_meal_session_swipe",
         ),
+    )
+
+
+class UserFeedItem(Base):
+    __tablename__ = "user_feed_item"
+    id: Mapped[uuid.UUID] = mapped_column(
+        sa.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime, server_default=func.now())
+    
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        sa.UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="CASCADE"), nullable=False
+    )
+    meal_review_id: Mapped[uuid.UUID] = mapped_column(
+        sa.UUID(as_uuid=True), ForeignKey("meal_review.id", ondelete="CASCADE"), nullable=False
+    )
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    
+    # Relationships
+    user: Mapped["User"] = relationship(back_populates="feed_items")
+    meal_review: Mapped["MealReview"] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "meal_review_id", name="unique_user_feed_item"),
     )
