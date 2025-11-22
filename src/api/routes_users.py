@@ -27,17 +27,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.api.auth import jwt_utils
+from src.api.common_schemas import BackendImageResponse
 from src.api.dependencies import get_current_user
-from src.db.models import User, MealReview, Place, MealReviewImage
+
+# Import schemas from reviews route (assuming no circular dependency issues for schemas)
+# If this fails, we might need to move schemas to common_schemas.py
+from src.api.routes_reviews import PlaceBasicInfo, ReviewResponse, UserBasicInfo
+from src.db.models import MealReview, MealReviewImage, Place, User
 from src.db.session import get_async_db_session
 from src.services import image_processing, storage
 from src.services.recommendation import RecommendationService
 from src.utils.pagination import Page, PaginationInput, paginate_query
-from src.api.common_schemas import BackendImageResponse
-
-# Import schemas from reviews route (assuming no circular dependency issues for schemas)
-# If this fails, we might need to move schemas to common_schemas.py
-from src.api.routes_reviews import ReviewResponse, PlaceBasicInfo, UserBasicInfo
 
 router = APIRouter()
 
@@ -362,8 +362,8 @@ async def change_password(
 
 @router.get("/users/me/feed", response_model=List[ReviewResponse])
 async def get_my_feed(
-    limit: int = Query(10, ge=1, le=50),
     current_user: Annotated[User, Depends(get_current_user)],
+    limit: int = Query(10, ge=1, le=50),
     db: AsyncSession = Depends(get_async_db_session),
 ) -> List[ReviewResponse]:
     """
@@ -371,7 +371,7 @@ async def get_my_feed(
     """
     service = RecommendationService(db)
     reviews = await service.get_user_feed(current_user.id, limit=limit)
-    
+
     results = []
     for review in reviews:
         place = review.place
@@ -437,5 +437,5 @@ async def get_my_feed(
                 distance_meters=None,
             )
         )
-    
+
     return results
