@@ -4,7 +4,17 @@ from pydantic_settings import BaseSettings as PydanticBaseSettings
 
 
 class BaseSettings(PydanticBaseSettings):
-    """Base settings."""
+    """
+    Base settings class that inherits from PydanticBaseSettings.
+
+    How it works:
+    1. Pydantic automatically reads environment variables that match the field names.
+    2. It applies the `env_prefix` defined in the inner `Config` class.
+       For example, if `env_prefix="MY_"`, a field named `host` will be populated
+       by the environment variable `MY_HOST`.
+    3. It also loads variables from the `.env` file specified in `env_file`.
+    4. Type conversion is automatic (e.g., "true" in env var becomes `True` boolean).
+    """
 
     class Config:
         env_file = ".env"

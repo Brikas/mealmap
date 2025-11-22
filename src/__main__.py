@@ -27,8 +27,16 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
         import os
+
         port = int(os.getenv("PORT", 8000))
-        uvicorn.run("src.application:app", host="0.0.0.0", port=port, reload=False)  # noqa: S104
+        app_env = os.getenv("APP_ENV", "dev")
+        should_reload = app_env.lower() == "dev"
+        uvicorn.run(
+            "src.application:app",
+            host="0.0.0.0",  # noqa: S104
+            port=port,
+            reload=should_reload,
+        )
     except KeyboardInterrupt:
         logger.info("Cancelled")
     except Exception as e:
