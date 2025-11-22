@@ -34,6 +34,23 @@ Visit: <http://localhost:8000/docs>
 
 Database: localhost:5432
 
+## Recommendation Feed (Food TikTok)
+
+The meal recommendation system combines user swipes with high-rated reviews to build a personalized queue.  
+Key pieces you might need:
+
+- Seed local data (10 users × 5 reviews each + likes):
+
+    ```bash
+    poetry run python admin/seed_recommendation_data.py
+    ```
+
+- Notebook demo: `admin/recommendation_test.ipynb` (run all cells to see top picks for a sample user).
+- API: `GET /users/me/feed?limit=20` returns the pre-ranked queue for the authenticated user.
+- Queue regeneration: if a user’s `user_feed_item` table is empty, the backend automatically recomputes their feed using the latest reviews/ratings.
+
+Use this section as the canonical reference when hooking up the frontend swipe/scroll experience.
+
 ## [Tests](notes/tests.md)
 
 ### Unit tests

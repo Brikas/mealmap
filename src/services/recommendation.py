@@ -57,7 +57,7 @@ class RecommendationService:
             .options(selectinload(Swipe.meal_review))
         )
         liked_swipes_res = await self.db.execute(liked_swipes_query)
-        liked_reviews = [s.meal_review for s in liked_swipes_res.scalars().all()]
+        liked_swipe_reviews = [s.meal_review for s in liked_swipes_res.scalars().all()]
 
         # 1b. Get user's own high-rated reviews (Self-authored content indicates preference)
         authored_reviews_query = (
@@ -69,20 +69,19 @@ class RecommendationService:
         
         # Combine swipes and own reviews for the "User Profile"
         # We use a set logic to avoid duplicates if one somehow swiped their own review
-        liked_reviews_map = {r.id: r for r in liked_reviews}
-        for r in authored_reviews:
-            liked_reviews_map[r.id] = r
-        liked_reviews = list(liked_reviews_map.values())
+        # Keep swipe reviews and authored reviews as separate lists so we can weight them differently downstream
+        preference_reviews = liked_swipe_reviews + authored_reviews
         
         # 2. Identify what to exclude (already swiped)
         swiped_ids_query = select(Swipe.meal_review_id).where(Swipe.user_id == user_id)
         swiped_ids_res = await self.db.execute(swiped_ids_query)
         swiped_ids = set(swiped_ids_res.scalars().all())
+        swiped_ids.update(r.id for r in authored_reviews)  # never recommend their own dishes
         
         # 3. Collaborative Candidate Generation (Meals liked by similar users)
         collab_boost_ids = set()
-        if liked_reviews:
-            liked_review_ids = [r.id for r in liked_reviews]
+        if preference_reviews:
+            liked_review_ids = [r.id for r in preference_reviews]
             
             # Find users who liked what I liked
             similar_users_query = (
@@ -140,7 +139,11 @@ class RecommendationService:
 
         # 5. Calculate Scores (Hybrid)
         scores = await run_in_threadpool(
-            self._calculate_affinity_scores, liked_reviews, candidates, collab_boost_ids
+            self._calculate_affinity_scores,
+            liked_swipe_reviews,
+            authored_reviews,
+            candidates,
+            collab_boost_ids,
         )
         
         # 6. Store Recommendations
@@ -167,21 +170,26 @@ class RecommendationService:
         await self.db.commit()
 
     def _calculate_affinity_scores(
-        self, 
-        liked_reviews: List[MealReview], 
+        self,
+        swipe_likes: List[MealReview],
+        authored_reviews: List[MealReview],
         candidates: List[MealReview],
-        collab_ids: Set[uuid.UUID]
+        collab_ids: Set[uuid.UUID],
+        authored_weight: int = 25,
     ) -> Dict[uuid.UUID, float]:
-        
-        # Base scores: Rating
-        scores = {c.id: float(c.rating) * 0.2 for c in candidates}
+        # Base scores: Rating (heavier weight now that we rely on stars)
+        scores = {c.id: float(c.rating) for c in candidates}
         
         # Collaborative Boost
         for cid in scores:
             if cid in collab_ids:
                 scores[cid] += 2.0 # Significant boost for collaborative matches
         
-        if not liked_reviews:
+        profile_reviews: List[MealReview] = swipe_likes + authored_reviews * max(
+            authored_weight, 1
+        )
+
+        if not profile_reviews:
             # Cold start: rely on rating and collab
             return scores
 
@@ -197,7 +205,7 @@ class RecommendationService:
             text_content = f"{review.meal_name} {review.meal_name} {review.text or ''}" 
             return f"{text_content} {' '.join(tags)}"
 
-        liked_docs = [extract_features(r) for r in liked_reviews]
+        liked_docs = [extract_features(r) for r in profile_reviews]
         candidate_docs = [extract_features(r) for r in candidates]
         
         # TF-IDF Vectorization

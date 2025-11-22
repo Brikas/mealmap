@@ -1,5 +1,4 @@
 make run
-dart run build_runner watch --delete-conflicting-outputs
 
 http://localhost:8000/docs
 
