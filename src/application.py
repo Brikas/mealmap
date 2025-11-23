@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from src.api.auth.routes import router as auth_router
@@ -49,3 +50,17 @@ app.include_router(meals_router, tags=["meals"])
 app.include_router(reviews_router, tags=["reviews"])
 app.include_router(test_router, tags=["test"])
 app.include_router(swipes_router, tags=["swipes"])
+
+origins = [
+    "https://mealmap.christmas",
+    "http://localhost:5173",
+    "http://localhost:4173",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
