@@ -3,21 +3,11 @@ all: help
 ##	By Airidas
 .PHONY: db-dump
 db-dump:  ## Backup the database to a specific directory
-	@echo Dumping database...
-	@docker exec postgres pg_dump -U postgres -d postgres -F c -f /var/lib/postgresql/data/db_backup.pg_dump
-
-	@if not exist gitignore\db-dumps mkdir gitignore\db-dumps
-	docker cp postgres:/var/lib/postgresql/data/db_backup.pg_dump gitignore/db-dumps/
+	@python3 scripts/db_manage.py dump
 
 .PHONY: db-restore
 db-restore: ## Restore the database from a dump
-	@if not exist "gitignore\db-dumps\db_backup.pg_dump" ( \
-		echo Error: Backup file not found at 'gitignore\db-dumps\db_backup.pg_dump' & exit /b 1 \
-	) else ( \
-		echo Backup file found. Proceeding with restore. & \
-		@docker cp gitignore/db-dumps/db_backup.pg_dump postgres:/var/lib/postgresql/data/ & \
-		@docker exec postgres pg_restore -U postgres -d postgres -c /var/lib/postgresql/data/db_backup.pg_dump \
-	)
+	@python3 scripts/db_manage.py restore
 
 .PHONY: db-restore-local
 db-restore-local: ## Restore the database from a dump locally
@@ -25,17 +15,7 @@ db-restore-local: ## Restore the database from a dump locally
 
 .PHONY: migrate-test
 migrate-test: ## Dump the database, apply migrations, and optionally restore
-	@echo Dumping database...
-	@docker exec postgres pg_dump -U postgres -d postgres -F c -f /var/lib/postgresql/data/db_backup.pg_dump
-
-	@echo Running alembic upgrade head...
-	@poetry run alembic upgrade head || echo "Migration failed."
-
-	@echo Press any key to restore database (Ctrl + C) to not...
-	@pause > nul
-
-	@echo Restoring database...
-	docker exec postgres pg_restore -U postgres -d postgres -c /var/lib/postgresql/data/db_backup.pg_dump
+	@python3 scripts/db_manage.py migrate-test
 
 ## FROM TEMPLATE
 
@@ -106,7 +86,7 @@ reboot: kill run  ## Kill all running containers and run the project
 
 .PHONY: show-envs-info
 show-envs-info:  ## Show information about environment variables used by the application. Also you can specify format using FORMAT variable. Like: make show-envs-info FORMAT="markdown"
-	@python scripts/print_env_vars.py $(FORMAT)
+	@python3 scripts/print_env_vars.py $(FORMAT)
 
 .PHONY: remove
 remove:
