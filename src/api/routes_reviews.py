@@ -29,7 +29,7 @@ from src.api.common_schemas import (
     ObjectCreationResponse,
 )
 from src.api.dependencies import get_current_user
-from src.db.models import MealReview, MealReviewImage, Place, TriState, User
+from src.db.models import Meal, MealReview, MealReviewImage, Place, TriState, User
 from src.db.session import get_async_db_session
 from src.services import image_processing, storage
 from src.utils.misc_utils import calculate_distance
@@ -65,14 +65,7 @@ class UserBasicInfo(BaseModel):
     image_url: Optional[str] = None
 
 
-class ReviewResponse(BaseModel):
-    id: uuid.UUID
-    meal_name: str
-    rating: int
-    text: Optional[str] = None
-    waiting_time_minutes: Optional[int] = None
-    price: Optional[float] = None
-    test_id: Optional[str] = None
+class ReviewTags(BaseModel):
     is_vegan: str
     is_halal: str
     is_vegetarian: str
@@ -80,6 +73,18 @@ class ReviewResponse(BaseModel):
     is_gluten_free: str
     is_dairy_free: str
     is_nut_free: str
+
+
+class ReviewResponse(BaseModel):
+    id: uuid.UUID
+    meal_id: uuid.UUID
+    meal_name: str
+    rating: int
+    text: Optional[str] = None
+    waiting_time_minutes: Optional[int] = None
+    price: Optional[float] = None
+    test_id: Optional[str] = None
+    tags: ReviewTags
     image_count: int
     first_image: Optional[BackendImageResponse] = None
     place: PlaceBasicInfo
@@ -100,9 +105,10 @@ class ReviewDetailedResponse(ReviewResponse):
 
 @router.post("/reviews", response_model=ObjectCreationResponse)
 async def create_review(
-    place_id: Annotated[uuid.UUID, Form()],
-    meal_name: Annotated[str, Form(min_length=1, max_length=200)],
     rating: Annotated[int, Form(ge=1, le=5)],
+    place_id: Annotated[Optional[uuid.UUID], Form()] = None,
+    meal_id: Annotated[Optional[uuid.UUID], Form()] = None,
+    meal_name: Annotated[Optional[str], Form(min_length=1, max_length=200)] = None,
     text: Annotated[Optional[str], Form(max_length=10000)] = None,
     waiting_time_minutes: Annotated[Optional[int], Form(ge=0)] = None,
     price: Annotated[Optional[float], Form(ge=0, le=10000000)] = None,
@@ -114,30 +120,60 @@ async def create_review(
     is_gluten_free: Annotated[TriStateInput, Form()] = TriStateInput.unspecified,
     is_dairy_free: Annotated[TriStateInput, Form()] = TriStateInput.unspecified,
     is_nut_free: Annotated[TriStateInput, Form()] = TriStateInput.unspecified,
-    images: List[UploadFile] = [],
+    images: Optional[List[UploadFile]] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db_session),
 ) -> ObjectCreationResponse:
-    """Create a new meal review with optional images (max 5)."""
+    """Create a new meal review with optional images (max 5).
+
+    Either meal_id or (place_id and meal_name) must be provided to determine the meal.
+    If the meal does not exist when using place_id and meal_name, it will be created.
+    """
+    if images is None:
+        images = []
 
     # Validate images count
     if len(images) > 5:
         raise HTTPException(status_code=400, detail="Cannot upload more than 5 images.")
 
-    # Validate place exists
-    place = await db.get(Place, place_id)
-    if not place:
-        raise HTTPException(status_code=404, detail="Place not found")
+    # Determine meal
+    meal = None
+    if meal_id:
+        meal = await db.get(Meal, meal_id)
+        if not meal:
+            raise HTTPException(status_code=404, detail="Meal not found")
+    elif place_id and meal_name:
+        # Check if place exists
+        place = await db.get(Place, place_id)
+        if not place:
+            raise HTTPException(status_code=404, detail="Place not found")
 
-    # Round price to 2 decimal places if provided
+        # Find or create meal
+        result = await db.execute(
+            select(Meal).where(Meal.place_id == place_id, Meal.name == meal_name)
+        )
+        meal = result.scalars().first()
+        if not meal:
+            meal = Meal(name=meal_name, place_id=place_id, test_id=test_id)
+            db.add(meal)
+            await db.flush()  # get ID
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Either meal_id or (place_id and meal_name) must be provided.",
+        )
+
+    # Update meal price if provided and different
     if price is not None:
         price = round(price, 2)
+        if meal.price != price:
+            meal.price = price
+            db.add(meal)
 
     # Create review
     new_review = MealReview(
         user_id=current_user.id,
-        place_id=place_id,
-        meal_name=meal_name,
+        meal_id=meal.id,
         rating=rating,
         text=text,
         waiting_time_minutes=waiting_time_minutes,
@@ -206,6 +242,7 @@ async def create_review(
 @router.put("/reviews/{review_id}", response_model=MessageResponse)
 async def update_review(
     review_id: uuid.UUID,
+    meal_id: Annotated[Optional[uuid.UUID], Form()] = None,
     meal_name: Annotated[Optional[str], Form(min_length=1, max_length=200)] = None,
     rating: Annotated[Optional[int], Form(ge=1, le=5)] = None,
     text: Annotated[Optional[str], Form(max_length=10000)] = None,
@@ -219,7 +256,7 @@ async def update_review(
     is_gluten_free: Annotated[Optional[TriStateInput], Form()] = None,
     is_dairy_free: Annotated[Optional[TriStateInput], Form()] = None,
     is_nut_free: Annotated[Optional[TriStateInput], Form()] = None,
-    add_images: List[UploadFile] = [],
+    add_images: Optional[List[UploadFile]] = None,
     remove_image_ids: Annotated[
         Optional[str], Form(description="Comma-separated list of image IDs to remove")
     ] = None,
@@ -228,6 +265,8 @@ async def update_review(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> MessageResponse:
     """Update an existing review. Only the review creator can update."""
+    if add_images is None:
+        add_images = []
 
     result = await db.execute(
         select(MealReview)
@@ -245,8 +284,38 @@ async def update_review(
         )
 
     # Update fields
-    if meal_name is not None:
-        review.meal_name = meal_name
+    if meal_id is not None:
+        meal = await db.get(Meal, meal_id)
+        if not meal:
+            raise HTTPException(status_code=404, detail="Meal not found")
+
+        review.meal_id = meal_id
+    elif meal_name is not None:
+        # If meal name changed, we might need to switch to another meal or create one
+        # Assuming we stay in the same place
+        current_meal = await db.get(Meal, review.meal_id)
+        if current_meal is None:
+            logger.error(
+                f"Current meal with id {review.meal_id} not found for review \
+                {review_id}. This should not happen on a valid review. \
+                Is the meal deleted?"
+            )
+            raise HTTPException(
+                status_code=500, detail="Internal server error: meal does not exist"
+            )
+
+        if current_meal.name != meal_name:
+            place_id = current_meal.place_id
+            result = await db.execute(
+                select(Meal).where(Meal.place_id == place_id, Meal.name == meal_name)
+            )
+            meal = result.scalars().first()
+            if not meal:
+                meal = Meal(name=meal_name, place_id=place_id, test_id=test_id)
+                db.add(meal)
+                await db.flush()
+            review.meal_id = meal.id
+
     if rating is not None:
         review.rating = rating
     if text is not None:
@@ -255,6 +324,11 @@ async def update_review(
         review.waiting_time_minutes = waiting_time_minutes
     if price is not None:
         review.price = round(price, 2)
+        # Update meal price if different
+        meal = await db.get(Meal, review.meal_id)
+        if meal and meal.price != review.price:
+            meal.price = review.price
+            db.add(meal)
     if test_id is not None:
         review.test_id = test_id
     if is_vegan is not None:
@@ -350,6 +424,7 @@ async def update_review(
 @router.get("/reviews", response_model=Page[ReviewResponse])
 async def get_reviews(
     place_id: Optional[uuid.UUID] = Query(None),
+    meal_id: Optional[uuid.UUID] = Query(None),
     user_id: Optional[uuid.UUID] = Query(None),
     min_rating: Optional[int] = Query(None, ge=1, le=5),
     max_rating: Optional[int] = Query(None, ge=1, le=5),
@@ -359,6 +434,7 @@ async def get_reviews(
     min_waiting_time: Optional[int] = Query(None, ge=0),
     max_waiting_time: Optional[int] = Query(None, ge=0),
     meal_name: Optional[str] = Query(None),
+    cuisine: Optional[str] = Query(None),
     text: Optional[str] = Query(
         None, description="Search in review text (partial match)"
     ),
@@ -413,13 +489,17 @@ async def get_reviews(
     # Build query
     query = select(MealReview).options(
         selectinload(MealReview.images),
-        selectinload(MealReview.place).selectinload(Place.images),
+        selectinload(MealReview.meal)
+        .selectinload(Meal.place)
+        .selectinload(Place.images),
         selectinload(MealReview.user),
     )
 
     # Apply filters
     if place_id:
-        query = query.where(MealReview.place_id == place_id)
+        query = query.join(MealReview.meal).where(Meal.place_id == place_id)
+    if meal_id:
+        query = query.where(MealReview.meal_id == meal_id)
     if user_id:
         query = query.where(MealReview.user_id == user_id)
     if min_rating:
@@ -440,7 +520,13 @@ async def get_reviews(
     if max_waiting_time is not None:
         query = query.where(MealReview.waiting_time_minutes <= max_waiting_time)
     if meal_name:
-        query = query.where(MealReview.meal_name.ilike(f"%{meal_name}%"))
+        query = query.join(MealReview.meal).where(Meal.name.ilike(f"%{meal_name}%"))
+    if cuisine:
+        query = (
+            query.join(MealReview.meal)
+            .join(Meal.place)
+            .where(Place.cuisine.ilike(f"%{cuisine}%"))
+        )
     if text:
         query = query.where(MealReview.text.ilike(f"%{text}%"))
     if created_after:
@@ -463,7 +549,9 @@ async def get_reviews(
     for review in all_reviews:
         distance = None
         if lat is not None and lng is not None:
-            distance = calculate_distance(lat, lng, review.place.lat, review.place.lng)
+            distance = calculate_distance(
+                lat, lng, review.meal.place.lat, review.meal.place.lng
+            )
             if radius_m is not None and distance > radius_m:
                 continue
 
@@ -482,7 +570,7 @@ async def get_reviews(
         "price": lambda x: x["review"].price
         if x["review"].price is not None
         else float("inf"),
-        "meal_name": lambda x: x["review"].meal_name.lower(),
+        "meal_name": lambda x: x["review"].meal.name.lower(),
         "waiting_time_minutes": lambda x: x["review"].waiting_time_minutes
         if x["review"].waiting_time_minutes is not None
         else float("inf"),
@@ -504,7 +592,8 @@ async def get_reviews(
     results = []
     for item in page_data.results:
         review = item["review"]
-        place = review.place
+        meal = review.meal
+        place = meal.place
         user = review.user
 
         # Get first image
@@ -533,19 +622,22 @@ async def get_reviews(
         results.append(
             ReviewResponse(
                 id=review.id,
-                meal_name=review.meal_name,
+                meal_id=meal.id,
+                meal_name=meal.name,
                 rating=review.rating,
                 text=review.text,
                 waiting_time_minutes=review.waiting_time_minutes,
                 price=review.price,
                 test_id=review.test_id,
-                is_vegan=review.is_vegan.value,
-                is_halal=review.is_halal.value,
-                is_vegetarian=review.is_vegetarian.value,
-                is_spicy=review.is_spicy.value,
-                is_gluten_free=review.is_gluten_free.value,
-                is_dairy_free=review.is_dairy_free.value,
-                is_nut_free=review.is_nut_free.value,
+                tags=ReviewTags(
+                    is_vegan=review.is_vegan.value,
+                    is_halal=review.is_halal.value,
+                    is_vegetarian=review.is_vegetarian.value,
+                    is_spicy=review.is_spicy.value,
+                    is_gluten_free=review.is_gluten_free.value,
+                    is_dairy_free=review.is_dairy_free.value,
+                    is_nut_free=review.is_nut_free.value,
+                ),
                 image_count=image_count,
                 first_image=first_review_image,
                 place=PlaceBasicInfo(
@@ -591,7 +683,9 @@ async def get_review(
         .where(MealReview.id == review_id)
         .options(
             selectinload(MealReview.images),
-            selectinload(MealReview.place).selectinload(Place.images),
+            selectinload(MealReview.meal)
+            .selectinload(Meal.place)
+            .selectinload(Place.images),
             selectinload(MealReview.user),
         )
     )
@@ -613,9 +707,9 @@ async def get_review(
 
     # Get first place image
     first_place_image = None
-    if review.place.images:
+    if review.meal.place.images:
         sorted_place_images = sorted(
-            review.place.images, key=lambda i: i.sequence_index
+            review.meal.place.images, key=lambda i: i.sequence_index
         )
         first_place_image = BackendImageResponse(
             id=sorted_place_images[0].id,
@@ -625,27 +719,30 @@ async def get_review(
 
     return ReviewDetailedResponse(
         id=review.id,
-        meal_name=review.meal_name,
+        meal_id=review.meal.id,
+        meal_name=review.meal.name,
         rating=review.rating,
         text=review.text,
         waiting_time_minutes=review.waiting_time_minutes,
         price=review.price,
         test_id=review.test_id,
-        is_vegan=review.is_vegan.value,
-        is_halal=review.is_halal.value,
-        is_vegetarian=review.is_vegetarian.value,
-        is_spicy=review.is_spicy.value,
-        is_gluten_free=review.is_gluten_free.value,
-        is_dairy_free=review.is_dairy_free.value,
-        is_nut_free=review.is_nut_free.value,
+        tags=ReviewTags(
+            is_vegan=review.is_vegan.value,
+            is_halal=review.is_halal.value,
+            is_vegetarian=review.is_vegetarian.value,
+            is_spicy=review.is_spicy.value,
+            is_gluten_free=review.is_gluten_free.value,
+            is_dairy_free=review.is_dairy_free.value,
+            is_nut_free=review.is_nut_free.value,
+        ),
         image_count=len(backend_images),
         first_image=backend_images[0] if backend_images else None,
         place=PlaceBasicInfo(
-            id=review.place.id,
-            name=review.place.name,
-            address=review.place.address,
-            latitude=review.place.lat,
-            longitude=review.place.lng,
+            id=review.meal.place.id,
+            name=review.meal.place.name,
+            address=review.meal.place.address,
+            latitude=review.meal.place.lat,
+            longitude=review.meal.place.lng,
             first_image=first_place_image,
         ),
         user=UserBasicInfo(

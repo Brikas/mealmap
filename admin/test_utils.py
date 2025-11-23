@@ -35,20 +35,12 @@ def get_user_from_email(email: str, users: list) -> dict:
             return user
     raise ValueError(f"User with email {email} not found")
 
-def get_user_from_phone_number(phone_number: str, users: list) -> dict:
-    for user in users:
-        if "phone_number" not in user:
-            continue  # Skip users without a phone number
-        if user["phone_number"] == phone_number:
-            return user
-    raise ValueError(f"User with phone number {phone_number} not found")
 
 def get_user_from_id(user_id: str, users: list) -> dict:
     for user in users:
         if user["id"] == user_id:
             return user
     raise ValueError(f"User with id {user_id} not found")
-
 
 
 
@@ -71,8 +63,6 @@ def get_user_from_action_caller(
     """
     if "email" in action_caller:
         return get_user_from_email(action_caller["email"], users)
-    elif "phone_number" in action_caller:
-        return get_user_from_phone_number(action_caller["phone_number"], users)
     else:
         raise ValueError("Action caller must have either email or phone_number")
 
@@ -161,3 +151,9 @@ def get_review_from_test_id(test_id: str, reviews: list) -> dict:
         if review.get("test_id") == test_id:
             return review
     raise ValueError(f"Review with test_id {test_id} not found")
+
+def get_object_from_test_id(test_id: str, object_list: list) -> dict:
+    for obj in object_list:
+        if obj.get("test_id") == test_id:
+            return obj
+    raise ValueError(f"Object with test_id {test_id} not found")

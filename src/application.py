@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from loguru import logger
 
 from src.api.auth.routes import router as auth_router
+from src.api.routes_meals import router as meals_router
 from src.api.routes_places import router as places_router
 from src.api.routes_reviews import router as reviews_router
 from src.api.routes_test import router as test_router
@@ -41,5 +42,6 @@ app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(users_router, tags=["users"])
 app.include_router(places_router, tags=["places"])
+app.include_router(meals_router, tags=["meals"])
 app.include_router(reviews_router, tags=["reviews"])
 app.include_router(test_router, tags=["test"])

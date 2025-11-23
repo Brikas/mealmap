@@ -1,10 +1,209 @@
+def get_meals():
+    return [
+        {
+            "test_id": "avocado-sandwich",
+            "place_test_id": "kaist-duck-pond-cafe",
+            "name": "Avocado Sandwich",
+        },
+        {
+            "test_id": "spicy-chicken-burger",
+            "place_test_id": "moms-touch-chicken",
+            "name": "Spicy Chicken Burger",
+        },
+        {
+            "test_id": "regular-chicken-set",
+            "place_test_id": "moms-touch-chicken",
+            "name": "Regular Chicken Set",
+        },
+        {
+            "test_id": "pepperoni-pizza",
+            "place_test_id": "pizza-school",
+            "name": "Pepperoni Pizza",
+        },
+        {
+            "test_id": "cheese-pizza",
+            "place_test_id": "pizza-school",
+            "name": "Cheese Pizza",
+        },
+        {
+            "test_id": "veggie-supreme",
+            "place_test_id": "pizza-school",
+            "name": "Veggie Supreme",
+        },
+        {
+            "test_id": "whopper",
+            "place_test_id": "burger-king-kaist",
+            "name": "Whopper",
+        },
+        {
+            "test_id": "impossible-whopper",
+            "place_test_id": "burger-king-kaist",
+            "name": "Impossible Whopper",
+        },
+        {
+            "test_id": "grilled-pork-belly-set",
+            "place_test_id": "samgyeopsal-house",
+            "name": "Grilled Pork Belly Set",
+        },
+        {
+            "test_id": "spicy-pork-bulgogi",
+            "place_test_id": "samgyeopsal-house",
+            "name": "Spicy Pork Bulgogi",
+        },
+        {
+            "test_id": "beef-short-rib",
+            "place_test_id": "samgyeopsal-house",
+            "name": "Beef Short Rib",
+        },
+        {
+            "test_id": "caramel-macchiato",
+            "place_test_id": "starbucks-kaist",
+            "name": "Caramel Macchiato",
+        },
+        {
+            "test_id": "americano",
+            "place_test_id": "starbucks-kaist",
+            "name": "Americano",
+        },
+        {
+            "test_id": "egg-cheese-sandwich",
+            "place_test_id": "starbucks-kaist",
+            "name": "Egg & Cheese Sandwich",
+        },
+        {
+            "test_id": "honey-combo",
+            "place_test_id": "kyochon-chicken",
+            "name": "Honey Combo",
+        },
+        {
+            "test_id": "red-combo-spicy",
+            "place_test_id": "kyochon-chicken",
+            "name": "Red Combo (Spicy)",
+        },
+        {
+            "test_id": "abalone-porridge",
+            "place_test_id": "bon-juk-restaurant",
+            "name": "Abalone Porridge",
+        },
+        {
+            "test_id": "pumpkin-porridge",
+            "place_test_id": "bon-juk-restaurant",
+            "name": "Pumpkin Porridge",
+        },
+        {
+            "test_id": "veggie-delite",
+            "place_test_id": "subway-kaist",
+            "name": "Veggie Delite",
+        },
+        {
+            "test_id": "italian-bmt",
+            "place_test_id": "subway-kaist",
+            "name": "Italian BMT",
+        },
+        {
+            "test_id": "brown-sugar-pearl-milk-tea",
+            "place_test_id": "gongcha-bubbletea",
+            "name": "Brown Sugar Pearl Milk Tea",
+        },
+        {
+            "test_id": "mango-green-tea",
+            "place_test_id": "gongcha-bubbletea",
+            "name": "Mango Green Tea",
+        },
+        {
+            "test_id": "belgian-waffle",
+            "place_test_id": "caffe-bene-kaist",
+            "name": "Belgian Waffle",
+        },
+        {
+            "test_id": "croissant",
+            "place_test_id": "paris-baguette-kaist",
+            "name": "Croissant",
+        },
+        {
+            "test_id": "strawberry-cake-slice",
+            "place_test_id": "paris-baguette-kaist",
+            "name": "Strawberry Cake Slice",
+        },
+        {
+            "test_id": "golden-olive-fried-chicken",
+            "place_test_id": "bbq-chicken-daehak",
+            "name": "Golden Olive Fried Chicken",
+        },
+        {
+            "test_id": "gangjeong-chicken",
+            "place_test_id": "bbq-chicken-daehak",
+            "name": "Gangjeong Chicken",
+        },
+        {
+            "test_id": "tiramisu-cake",
+            "place_test_id": "twosome-place",
+            "name": "Tiramisu Cake",
+        },
+        {
+            "test_id": "iced-latte",
+            "place_test_id": "twosome-place",
+            "name": "Iced Latte",
+        },
+        {
+            "test_id": "supreme-pizza",
+            "place_test_id": "dominos-pizza-kaist",
+            "name": "Supreme Pizza",
+        },
+        {
+            "test_id": "bulgogi-burger",
+            "place_test_id": "lotteria-fastfood",
+            "name": "Bulgogi Burger",
+        },
+        {
+            "test_id": "shrimp-burger",
+            "place_test_id": "lotteria-fastfood",
+            "name": "Shrimp Burger",
+        },
+        {
+            "test_id": "tuna-kimbap",
+            "place_test_id": "kimbap-heaven",
+            "name": "Tuna Kimbap",
+        },
+        {
+            "test_id": "kimchi-fried-rice",
+            "place_test_id": "kimbap-heaven",
+            "name": "Kimchi Fried Rice",
+        },
+        {
+            "test_id": "spicy-ramen",
+            "place_test_id": "kimbap-heaven",
+            "name": "Spicy Ramen",
+        },
+        {
+            "test_id": "pretzel-cinnamon",
+            "place_test_id": "tom-n-toms",
+            "name": "Pretzel Cinnamon",
+        },
+        {
+            "test_id": "cold-brew",
+            "place_test_id": "ediya-coffee",
+            "name": "Cold Brew",
+        },
+        {
+            "test_id": "blueberry-smoothie",
+            "place_test_id": "ediya-coffee",
+            "name": "Blueberry Smoothie",
+        },
+        {
+            "test_id": "vanilla-latte",
+            "place_test_id": "angelinus-coffee",
+            "name": "Vanilla Latte",
+        },
+    ]
+
 def get_reviews():
 
     return [
         {
             "test_id": "avocado-sandwich-1",
             "place_test_id": "kaist-duck-pond-cafe",
-            "meal_name": "Avocado Sandwich",
+            "meal_test_id": "avocado-sandwich",
             "rating": 4,
             "text": "Fresh and tasty sandwich with a nice view of the pond.",
             "waiting_time_minutes": 10,
@@ -23,7 +222,7 @@ def get_reviews():
         {
             "test_id": "spicy-chicken-burger-1",
             "place_test_id": "moms-touch-chicken",
-            "meal_name": "Spicy Chicken Burger",
+            "meal_test_id": "spicy-chicken-burger",
             "rating": 5,
             "text": "🔥🔥🔥 ABSOLUTELY AMAZING! The spice level is perfect and the chicken is so crispy!\n\nI come here at least twice a week. Best chicken burger in Daejeon hands down. The staff is super friendly too!",
             "waiting_time_minutes": 15,
@@ -42,7 +241,7 @@ def get_reviews():
         {
             "test_id": "regular-chicken-set-1",
             "place_test_id": "moms-touch-chicken",
-            "meal_name": "Regular Chicken Set",
+            "meal_test_id": "regular-chicken-set",
             "rating": 4,
             "text": "Good chicken, reasonable price",
             "price": 8900,
@@ -60,7 +259,7 @@ def get_reviews():
         {
             "test_id": "pepperoni-pizza-1",
             "place_test_id": "pizza-school",
-            "meal_name": "Pepperoni Pizza",
+            "meal_test_id": "pepperoni-pizza",
             "rating": 3,
             "text": "정말 맛있어요! 가격도 저렴하고 양도 많아요. 학생들한테 완벽한 선택입니다 👍",
             "waiting_time_minutes": 20,
@@ -80,7 +279,7 @@ def get_reviews():
         {
             "test_id": "cheese-pizza-1",
             "place_test_id": "pizza-school",
-            "meal_name": "Cheese Pizza",
+            "meal_test_id": "cheese-pizza",
             "rating": 2,
             "text": "Way too greasy and the cheese tasted cheap. Not worth it even for the low price.",
             "waiting_time_minutes": 18,
@@ -99,7 +298,7 @@ def get_reviews():
         {
             "test_id": "veggie-supreme-1",
             "place_test_id": "pizza-school",
-            "meal_name": "Veggie Supreme",
+            "meal_test_id": "veggie-supreme",
             "rating": 4,
             "text": "Actually pretty decent for a budget pizza place! Lots of vegetables and fresh ingredients.",
             "waiting_time_minutes": 22,
@@ -118,7 +317,7 @@ def get_reviews():
         {
             "test_id": "whopper-1",
             "place_test_id": "burger-king-kaist",
-            "meal_name": "Whopper",
+            "meal_test_id": "whopper",
             "rating": 3,
             "text": "Standard BK experience",
             "waiting_time_minutes": 8,
@@ -137,7 +336,7 @@ def get_reviews():
         {
             "test_id": "impossible-whopper-1",
             "place_test_id": "burger-king-kaist",
-            "meal_name": "Impossible Whopper",
+            "meal_test_id": "impossible-whopper",
             "rating": 4,
             "text": "Finally a decent vegetarian option at a fast food place! Tastes surprisingly close to the real thing.",
             "waiting_time_minutes": 10,
@@ -156,7 +355,7 @@ def get_reviews():
         {
             "test_id": "grilled-pork-belly-set-1",
             "place_test_id": "samgyeopsal-house",
-            "meal_name": "Grilled Pork Belly Set",
+            "meal_test_id": "grilled-pork-belly-set",
             "rating": 5,
             "text": "삼겹살이 정말 두껍고 맛있어요! 같이 나오는 반찬들도 훌륭하고 사장님이 친절하세요.\n\n가격 대비 최고의 선택입니다. 친구들이랑 자주 옵니다 😊",
             "waiting_time_minutes": 5,
@@ -175,7 +374,7 @@ def get_reviews():
         {
             "test_id": "spicy-pork-bulgogi-1",
             "place_test_id": "samgyeopsal-house",
-            "meal_name": "Spicy Pork Bulgogi",
+            "meal_test_id": "spicy-pork-bulgogi",
             "rating": 4,
             "text": "Good spice level and flavor!",
             "waiting_time_minutes": 7,
@@ -195,7 +394,7 @@ def get_reviews():
         {
             "test_id": "beef-short-rib-1",
             "place_test_id": "samgyeopsal-house",
-            "meal_name": "Beef Short Rib",
+            "meal_test_id": "beef-short-rib",
             "rating": 5,
             "text": "Expensive but worth every won. The meat is incredibly tender and well-marinated. Service is excellent - they grill it for you perfectly.",
             "waiting_time_minutes": 10,
@@ -214,7 +413,7 @@ def get_reviews():
         {
             "test_id": "caramel-macchiato-1",
             "place_test_id": "starbucks-kaist",
-            "meal_name": "Caramel Macchiato",
+            "meal_test_id": "caramel-macchiato",
             "rating": 3,
             "text": "너무 달아요",
             "price": 5600,
@@ -232,7 +431,7 @@ def get_reviews():
         {
             "test_id": "americano-1",
             "place_test_id": "starbucks-kaist",
-            "meal_name": "Americano",
+            "meal_test_id": "americano",
             "rating": 4,
             "text": "Reliable coffee when I need to study",
             "waiting_time_minutes": 5,
@@ -249,9 +448,9 @@ def get_reviews():
             ]
         },
         {
-            "test_id": "egg-&-cheese-sandwich-1",
+            "test_id": "egg-cheese-sandwich-1",
             "place_test_id": "starbucks-kaist",
-            "meal_name": "Egg & Cheese Sandwich",
+            "meal_test_id": "egg-cheese-sandwich",
             "rating": 2,
             "text": "Overpriced and underwhelming. The bread was dry and the egg was rubbery. For 5500 won I expected much better quality.\n\nNot worth it at all.",
             "waiting_time_minutes": 12,
@@ -270,7 +469,7 @@ def get_reviews():
         {
             "test_id": "honey-combo-1",
             "place_test_id": "kyochon-chicken",
-            "meal_name": "Honey Combo",
+            "meal_test_id": "honey-combo",
             "rating": 5,
             "text": "🍗 THE BEST CHICKEN IN KOREA! No debate!\n\nPerfectly crispy outside, juicy inside. The honey glaze is addictive. I literally dream about this chicken.",
             "waiting_time_minutes": 25,
@@ -289,7 +488,7 @@ def get_reviews():
         {
             "test_id": "red-combo-(spicy)-1",
             "place_test_id": "kyochon-chicken",
-            "meal_name": "Red Combo (Spicy)",
+            "meal_test_id": "red-combo-spicy",
             "rating": 4,
             "text": "진짜 매워요! 하지만 맛있어요 🔥",
             "waiting_time_minutes": 30,
@@ -305,7 +504,7 @@ def get_reviews():
         {
             "test_id": "abalone-porridge-1",
             "place_test_id": "bon-juk-restaurant",
-            "meal_name": "Abalone Porridge",
+            "meal_test_id": "abalone-porridge",
             "rating": 5,
             "text": "Perfect comfort food when you're sick or just want something warm and nourishing. The abalone is real and the porridge is smooth and flavorful.\n\nHighly recommended!",
             "waiting_time_minutes": 15,
@@ -321,7 +520,7 @@ def get_reviews():
         {
             "test_id": "pumpkin-porridge-1",
             "place_test_id": "bon-juk-restaurant",
-            "meal_name": "Pumpkin Porridge",
+            "meal_test_id": "pumpkin-porridge",
             "rating": 4,
             "text": "Healthy and delicious",
             "waiting_time_minutes": 12,
@@ -337,7 +536,7 @@ def get_reviews():
         {
             "test_id": "veggie-delite-1",
             "place_test_id": "subway-kaist",
-            "meal_name": "Veggie Delite",
+            "meal_test_id": "veggie-delite",
             "rating": 3,
             "text": "It's just vegetables on bread. Nothing special but at least it's fresh.",
             "waiting_time_minutes": 5,
@@ -353,7 +552,7 @@ def get_reviews():
         {
             "test_id": "italian-bmt-1",
             "place_test_id": "subway-kaist",
-            "meal_name": "Italian BMT",
+            "meal_test_id": "italian-bmt",
             "rating": 1,
             "text": "WORST SUBWAY I'VE EVER BEEN TO!!!\n\nThe meat was old and smelled weird. The bread was stale. Staff was rude when I complained.\n\nNEVER COMING BACK. Reported to management.",
             "waiting_time_minutes": 8,
@@ -369,7 +568,7 @@ def get_reviews():
         {
             "test_id": "brown-sugar-pearl-milk-tea-1",
             "place_test_id": "gongcha-bubbletea",
-            "meal_name": "Brown Sugar Pearl Milk Tea",
+            "meal_test_id": "brown-sugar-pearl-milk-tea",
             "rating": 5,
             "text": "😍 Perfect sweetness and the pearls are so chewy! My go-to bubble tea spot.",
             "waiting_time_minutes": 10,
@@ -385,7 +584,7 @@ def get_reviews():
         {
             "test_id": "mango-green-tea-1",
             "place_test_id": "gongcha-bubbletea",
-            "meal_name": "Mango Green Tea",
+            "meal_test_id": "mango-green-tea",
             "rating": 4,
             "text": "Refreshing and not too sweet",
             "waiting_time_minutes": 7,
@@ -401,7 +600,7 @@ def get_reviews():
         {
             "test_id": "belgian-waffle-1",
             "place_test_id": "caffe-bene-kaist",
-            "meal_name": "Belgian Waffle",
+            "meal_test_id": "belgian-waffle",
             "rating": 4,
             "text": "와플이 겉은 바삭하고 속은 부드러워요. 아이스크림이랑 같이 먹으면 완벽해요!",
             "waiting_time_minutes": 15,
@@ -417,7 +616,7 @@ def get_reviews():
         {
             "test_id": "croissant-1",
             "place_test_id": "paris-baguette-kaist",
-            "meal_name": "Croissant",
+            "meal_test_id": "croissant",
             "rating": 3,
             "text": "Decent but nothing amazing. Good for a quick breakfast.",
             "price": 2800,
@@ -432,7 +631,7 @@ def get_reviews():
         {
             "test_id": "strawberry-cake-slice-1",
             "place_test_id": "paris-baguette-kaist",
-            "meal_name": "Strawberry Cake Slice",
+            "meal_test_id": "strawberry-cake-slice",
             "rating": 5,
             "text": "The cream is so light and fluffy! Fresh strawberries and the sponge cake is perfectly moist.\n\nWorth the calories 🍰✨",
             "waiting_time_minutes": 3,
@@ -448,7 +647,7 @@ def get_reviews():
         {
             "test_id": "golden-olive-fried-chicken-1",
             "place_test_id": "bbq-chicken-daehak",
-            "meal_name": "Golden Olive Fried Chicken",
+            "meal_test_id": "golden-olive-fried-chicken",
             "rating": 4,
             "text": "Really good! Crispy and the olive oil makes it feel a bit less guilty to eat 😅",
             "waiting_time_minutes": 28,
@@ -464,7 +663,7 @@ def get_reviews():
         {
             "test_id": "gangjeong-chicken-1",
             "place_test_id": "bbq-chicken-daehak",
-            "meal_name": "Gangjeong Chicken",
+            "meal_test_id": "gangjeong-chicken",
             "rating": 3,
             "text": "너무 달아서 좀 느끼해요",
             "waiting_time_minutes": 25,
@@ -480,7 +679,7 @@ def get_reviews():
         {
             "test_id": "tiramisu-cake-1",
             "place_test_id": "twosome-place",
-            "meal_name": "Tiramisu Cake",
+            "meal_test_id": "tiramisu-cake",
             "rating": 5,
             "text": "INCREDIBLE! The best tiramisu outside of Italy I swear! The coffee flavor is strong and the mascarpone is perfect.\n\nA bit pricey but absolutely worth it for special occasions.",
             "waiting_time_minutes": 5,
@@ -496,7 +695,7 @@ def get_reviews():
         {
             "test_id": "iced-latte-1",
             "place_test_id": "twosome-place",
-            "meal_name": "Iced Latte",
+            "meal_test_id": "iced-latte",
             "rating": 3,
             "text": "Average coffee, overpriced",
             "waiting_time_minutes": 8,
@@ -512,7 +711,7 @@ def get_reviews():
         {
             "test_id": "supreme-pizza-1",
             "place_test_id": "dominos-pizza-kaist",
-            "meal_name": "Supreme Pizza",
+            "meal_test_id": "supreme-pizza",
             "rating": 2,
             "text": "Cold when it arrived and the toppings were sparse. Not worth 20,000 won at all. Very disappointed.",
             "waiting_time_minutes": 45,
@@ -528,7 +727,7 @@ def get_reviews():
         {
             "test_id": "bulgogi-burger-1",
             "place_test_id": "lotteria-fastfood",
-            "meal_name": "Bulgogi Burger",
+            "meal_test_id": "bulgogi-burger",
             "rating": 3,
             "text": "한국식 불고기가 들어간 버거. 독특하긴 한데 그냥 그래요.",
             "waiting_time_minutes": 10,
@@ -544,7 +743,7 @@ def get_reviews():
         {
             "test_id": "shrimp-burger-1",
             "place_test_id": "lotteria-fastfood",
-            "meal_name": "Shrimp Burger",
+            "meal_test_id": "shrimp-burger",
             "rating": 4,
             "text": "Better than expected! The shrimp patty is actually quite good and crunchy.",
             "waiting_time_minutes": 12,
@@ -560,7 +759,7 @@ def get_reviews():
         {
             "test_id": "tuna-kimbap-1",
             "place_test_id": "kimbap-heaven",
-            "meal_name": "Tuna Kimbap",
+            "meal_test_id": "tuna-kimbap",
             "rating": 5,
             "text": "AMAZING VALUE! Only 3000 won and it's delicious and filling. Perfect student food.\n\nI eat here almost every day 🍙",
             "waiting_time_minutes": 5,
@@ -576,7 +775,7 @@ def get_reviews():
         {
             "test_id": "kimchi-fried-rice-1",
             "place_test_id": "kimbap-heaven",
-            "meal_name": "Kimchi Fried Rice",
+            "meal_test_id": "kimchi-fried-rice",
             "rating": 4,
             "text": "김치볶음밥 최고! 가격도 싸고 맛도 좋아요 👍",
             "waiting_time_minutes": 8,
@@ -592,7 +791,7 @@ def get_reviews():
         {
             "test_id": "spicy-ramen-1",
             "place_test_id": "kimbap-heaven",
-            "meal_name": "Spicy Ramen",
+            "meal_test_id": "spicy-ramen",
             "rating": 3,
             "text": "Basic instant ramen but convenient when you're in a rush",
             "waiting_time_minutes": 7,
@@ -608,7 +807,7 @@ def get_reviews():
         {
             "test_id": "pretzel-cinnamon-1",
             "place_test_id": "tom-n-toms",
-            "meal_name": "Pretzel Cinnamon",
+            "meal_test_id": "pretzel-cinnamon",
             "rating": 4,
             "text": "Warm, soft, and perfectly sweet. Great with their coffee!",
             "waiting_time_minutes": 10,
@@ -624,7 +823,7 @@ def get_reviews():
         {
             "test_id": "cold-brew-1",
             "place_test_id": "ediya-coffee",
-            "meal_name": "Cold Brew",
+            "meal_test_id": "cold-brew",
             "rating": 4,
             "text": "Smooth and strong. Best value coffee chain in Korea!",
             "waiting_time_minutes": 3,
@@ -640,7 +839,7 @@ def get_reviews():
         {
             "test_id": "blueberry-smoothie-1",
             "place_test_id": "ediya-coffee",
-            "meal_name": "Blueberry Smoothie",
+            "meal_test_id": "blueberry-smoothie",
             "rating": 2,
             "text": "Tasted artificial and was mostly ice. Not recommended.",
             "waiting_time_minutes": 6,
@@ -656,7 +855,7 @@ def get_reviews():
         {
             "test_id": "vanilla-latte-1",
             "place_test_id": "angelinus-coffee",
-            "meal_name": "Vanilla Latte",
+            "meal_test_id": "vanilla-latte",
             "rating": 3,
             "text": "ok",
             "price": 5100,
@@ -667,6 +866,86 @@ def get_reviews():
             "is_gluten_free": "unspecified",
             "is_dairy_free": "unspecified",
             "is_nut_free": "unspecified",
+        },
+        {
+            "test_id": "spicy-chicken-burger-2",
+            "place_test_id": "moms-touch-chicken",
+            "meal_test_id": "spicy-chicken-burger",
+            "rating": 3,
+            "text": "It was okay, but a bit too spicy for my taste. The chicken was quality though.",
+            "waiting_time_minutes": 10,
+            "price": 6500,
+            "is_vegan": "no",
+            "is_halal": "unspecified",
+            "is_vegetarian": "no",
+            "is_spicy": "yes",
+            "is_gluten_free": "no",
+            "is_dairy_free": "unspecified",
+            "is_nut_free": "unspecified",
+        },
+        {
+            "test_id": "pepperoni-pizza-2",
+            "place_test_id": "pizza-school",
+            "meal_test_id": "pepperoni-pizza",
+            "rating": 5,
+            "text": "Best value pizza around campus. Can't beat the price.",
+            "waiting_time_minutes": 15,
+            "price": 5900,
+            "is_vegan": "no",
+            "is_halal": "unspecified",
+            "is_vegetarian": "no",
+            "is_spicy": "no",
+            "is_gluten_free": "no",
+            "is_dairy_free": "no",
+            "is_nut_free": "yes",
+        },
+        {
+            "test_id": "honey-combo-2",
+            "place_test_id": "kyochon-chicken",
+            "meal_test_id": "honey-combo",
+            "rating": 4,
+            "text": "Delicious but the wait time was quite long on a Friday night.",
+            "waiting_time_minutes": 45,
+            "price": 19000,
+            "is_vegan": "no",
+            "is_halal": "unspecified",
+            "is_vegetarian": "no",
+            "is_spicy": "no",
+            "is_gluten_free": "unspecified",
+            "is_dairy_free": "yes",
+            "is_nut_free": "unspecified",
+        },
+        {
+            "test_id": "tuna-kimbap-2",
+            "place_test_id": "kimbap-heaven",
+            "meal_test_id": "tuna-kimbap",
+            "rating": 4,
+            "text": "Simple, fresh, and filling. Good for a quick lunch.",
+            "waiting_time_minutes": 3,
+            "price": 3000,
+            "is_vegan": "no",
+            "is_halal": "unspecified",
+            "is_vegetarian": "no",
+            "is_spicy": "no",
+            "is_gluten_free": "no",
+            "is_dairy_free": "yes",
+            "is_nut_free": "yes",
+        },
+        {
+            "test_id": "americano-2",
+            "place_test_id": "starbucks-kaist",
+            "meal_test_id": "americano",
+            "rating": 5,
+            "text": "My daily fuel. Consistent quality every time.",
+            "waiting_time_minutes": 5,
+            "price": 4500,
+            "is_vegan": "yes",
+            "is_halal": "yes",
+            "is_vegetarian": "yes",
+            "is_spicy": "no",
+            "is_gluten_free": "yes",
+            "is_dairy_free": "yes",
+            "is_nut_free": "yes",
         },
     ]
 

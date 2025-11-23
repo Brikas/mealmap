@@ -32,7 +32,12 @@ from src.api.dependencies import get_current_user
 
 # Import schemas from reviews route (assuming no circular dependency issues for schemas)
 # If this fails, we might need to move schemas to common_schemas.py
-from src.api.routes_reviews import PlaceBasicInfo, ReviewResponse, UserBasicInfo
+from src.api.routes_reviews import (
+    PlaceBasicInfo,
+    ReviewResponse,
+    ReviewTags,
+    UserBasicInfo,
+)
 from src.db.models import MealReview, MealReviewImage, Place, User
 from src.db.session import get_async_db_session
 from src.services import image_processing, storage
@@ -374,7 +379,8 @@ async def get_my_feed(
 
     results = []
     for review in reviews:
-        place = review.place
+        meal = review.meal
+        place = meal.place
         user = review.user
 
         # Get first image
@@ -403,19 +409,22 @@ async def get_my_feed(
         results.append(
             ReviewResponse(
                 id=review.id,
-                meal_name=review.meal_name,
+                meal_id=meal.id,
+                meal_name=meal.name,
                 rating=review.rating,
                 text=review.text,
                 waiting_time_minutes=review.waiting_time_minutes,
                 price=review.price,
                 test_id=review.test_id,
-                is_vegan=review.is_vegan.value,
-                is_halal=review.is_halal.value,
-                is_vegetarian=review.is_vegetarian.value,
-                is_spicy=review.is_spicy.value,
-                is_gluten_free=review.is_gluten_free.value,
-                is_dairy_free=review.is_dairy_free.value,
-                is_nut_free=review.is_nut_free.value,
+                tags=ReviewTags(
+                    is_vegan=review.is_vegan.value,
+                    is_halal=review.is_halal.value,
+                    is_vegetarian=review.is_vegetarian.value,
+                    is_spicy=review.is_spicy.value,
+                    is_gluten_free=review.is_gluten_free.value,
+                    is_dairy_free=review.is_dairy_free.value,
+                    is_nut_free=review.is_nut_free.value,
+                ),
                 image_count=image_count,
                 first_image=first_review_image,
                 place=PlaceBasicInfo(

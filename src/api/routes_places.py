@@ -28,7 +28,7 @@ from src.api.common_schemas import (
     ObjectCreationResponse,
 )
 from src.api.dependencies import get_current_user
-from src.db.models import Place, PlaceImage, User
+from src.db.models import Meal, Place, PlaceImage, User
 from src.db.session import get_async_db_session
 from src.services import image_processing, storage
 from src.utils.misc_utils import calculate_distance
@@ -47,6 +47,7 @@ class PlaceResponse(BaseModel):
     longitude: Optional[float] = None
     average_rating: Optional[float] = None
     review_count: Optional[int] = None
+    cuisine: Optional[str] = None
     test_id: Optional[str] = None
 
 
@@ -67,12 +68,15 @@ async def create_place(
     latitude: Annotated[float, Form()],
     longitude: Annotated[float, Form()],
     address: Annotated[Optional[str], Form()] = None,
+    cuisine: Annotated[Optional[str], Form()] = None,
     test_id: Annotated[Optional[str], Form()] = None,
-    images: List[UploadFile] = [],
+    images: Optional[List[UploadFile]] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db_session),
 ) -> ObjectCreationResponse:
     """Create a new place with optional images."""
+    if images is None:
+        images = []
 
     # Validate images count and size
     if len(images) > 5:
@@ -100,6 +104,7 @@ async def create_place(
         address=address or "",
         lat=latitude,
         lng=longitude,
+        cuisine=cuisine,
         test_id=test_id,
     )
     db.add(new_place)
@@ -153,7 +158,7 @@ async def list_places(
     # Build query
     query = select(Place).options(
         selectinload(Place.images),
-        selectinload(Place.meal_reviews),
+        selectinload(Place.meals).selectinload(Meal.meal_reviews),
     )
 
     # Apply name filter
@@ -170,7 +175,7 @@ async def list_places(
         distance = calculate_distance(lat, lng, place.lat, place.lng)
         if distance <= radius_meters:
             # Calculate average rating and review count
-            reviews = place.meal_reviews
+            reviews = [r for m in place.meals for r in m.meal_reviews]
             avg_rating = (
                 sum(r.rating for r in reviews) / len(reviews) if reviews else None
             )
@@ -266,7 +271,7 @@ async def get_place_details(
         .where(Place.id == place_id)
         .options(
             selectinload(Place.images),
-            selectinload(Place.meal_reviews),
+            selectinload(Place.meals).selectinload(Meal.meal_reviews),
         )
     )
     place = result.scalars().first()
@@ -286,7 +291,7 @@ async def get_place_details(
         )
 
     # Calculate average rating and review count
-    reviews = place.meal_reviews
+    reviews = [r for m in place.meals for r in m.meal_reviews]
     avg_rating = sum(r.rating for r in reviews) / len(reviews) if reviews else None
     review_count = len(reviews)
 
@@ -323,7 +328,8 @@ async def update_place(
     place_id: uuid.UUID,
     name: Annotated[Optional[str], Form()] = None,
     address: Annotated[Optional[str], Form()] = None,
-    add_images: List[UploadFile] = [],
+    cuisine: Annotated[Optional[str], Form()] = None,
+    add_images: Optional[List[UploadFile]] = None,
     test_id: Annotated[Optional[str], Form()] = None,
     remove_image_ids: Annotated[Optional[str], Form()] = None,
     current_user: User = Depends(get_current_user),
@@ -334,6 +340,8 @@ async def update_place(
     - Any user can instantly add/append new attributes (address, images)
     - Admin verification needed for editing/deleting existing attributes
     """
+    if add_images is None:
+        add_images = []
 
     result = await db.execute(
         select(Place).where(Place.id == place_id).options(selectinload(Place.images))
@@ -357,6 +365,13 @@ async def update_place(
         elif address != place.address:
             approval_needed.append("address edit")
             # Don't apply the change yet
+
+    # Handle cuisine update
+    if cuisine is not None:
+        if not place.cuisine:
+            place.cuisine = cuisine
+        elif place.cuisine != cuisine:
+            approval_needed.append(f"cuisine: {cuisine}")
 
     if test_id is not None:
         # Directly allow test_id updates

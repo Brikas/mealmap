@@ -126,6 +126,7 @@ class Place(Base):
     lng: Mapped[float] = mapped_column(Float, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     address: Mapped[str] = mapped_column(String, nullable=False)
+    cuisine: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     test_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
@@ -133,8 +134,35 @@ class Place(Base):
     images: Mapped[List[PlaceImage]] = relationship(
         back_populates="place", cascade="all, delete-orphan"
     )
-    meal_reviews: Mapped[List["MealReview"]] = relationship(
+    meals: Mapped[List["Meal"]] = relationship(
         back_populates="place", cascade="all, delete-orphan"
+    )
+
+
+class Meal(Base):
+    __tablename__ = "meal"
+    id: Mapped[uuid.UUID] = mapped_column(
+        sa.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        sa.DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    place_id: Mapped[uuid.UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        ForeignKey("place.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    test_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    # --- Relationships ---
+    place: Mapped["Place"] = relationship(back_populates="meals")
+    meal_reviews: Mapped[List["MealReview"]] = relationship(
+        back_populates="meal", cascade="all, delete-orphan"
     )
 
 
@@ -160,11 +188,10 @@ class MealReview(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         sa.UUID(as_uuid=True), ForeignKey("app_user.id"), nullable=False
     )
-    place_id: Mapped[uuid.UUID] = mapped_column(
-        sa.UUID(as_uuid=True), ForeignKey("place.id"), nullable=False
+    meal_id: Mapped[uuid.UUID] = mapped_column(
+        sa.UUID(as_uuid=True), ForeignKey("meal.id", ondelete="CASCADE"), nullable=False
     )
 
-    meal_name: Mapped[str] = mapped_column(String, nullable=False)
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
     text: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     waiting_time_minutes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -197,7 +224,7 @@ class MealReview(Base):
 
     # --- Relationships ---
     user: Mapped["User"] = relationship(back_populates="meal_reviews")
-    place: Mapped["Place"] = relationship(back_populates="meal_reviews")
+    meal: Mapped["Meal"] = relationship(back_populates="meal_reviews")
     images: Mapped[List[MealReviewImage]] = relationship(
         back_populates="meal_review", cascade="all, delete-orphan"
     )
@@ -258,15 +285,19 @@ class UserFeedItem(Base):
         sa.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     created_at: Mapped[datetime] = mapped_column(sa.DateTime, server_default=func.now())
-    
+
     user_id: Mapped[uuid.UUID] = mapped_column(
-        sa.UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="CASCADE"), nullable=False
+        sa.UUID(as_uuid=True),
+        ForeignKey("app_user.id", ondelete="CASCADE"),
+        nullable=False,
     )
     meal_review_id: Mapped[uuid.UUID] = mapped_column(
-        sa.UUID(as_uuid=True), ForeignKey("meal_review.id", ondelete="CASCADE"), nullable=False
+        sa.UUID(as_uuid=True),
+        ForeignKey("meal_review.id", ondelete="CASCADE"),
+        nullable=False,
     )
     score: Mapped[float] = mapped_column(Float, nullable=False)
-    
+
     # Relationships
     user: Mapped["User"] = relationship(back_populates="feed_items")
     meal_review: Mapped["MealReview"] = relationship()
