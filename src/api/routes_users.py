@@ -72,6 +72,23 @@ class UserUpdate(BaseModel):
     # )
 
 
+@router.get("/users/me", response_model=UserResponse)
+async def read_users_me(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> UserResponse:
+    """
+    Get current user details.
+    """
+    return UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        first_name=current_user.first_name,
+        last_name=current_user.last_name,
+        image_url=storage.generate_presigned_url_or_none(current_user.image_path),
+        test_id=getattr(current_user, "test_id", None),
+    )
+
+
 @router.get("/users", response_model=Page[UserResponse])
 async def search_users(
     q: str = Query(..., min_length=1, description="Search query (name or email)"),

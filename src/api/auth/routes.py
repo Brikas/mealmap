@@ -70,14 +70,6 @@ async def register(
     )
 
 
-@router.get("/users/me")
-async def read_users_me(  # noqa: ANN201
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: AsyncSession = Depends(get_async_db_session),
-):
-    return current_user
-
-
 @router.post("/token")
 async def login_for_access_token(
     request_data: TokenRequest,  # Use the Pydantic model
