@@ -14,9 +14,9 @@ DATABASE_ASYNC_URL = settings.sqlalchemy_async_database_url
 
 async_engine = create_async_engine(
     DATABASE_ASYNC_URL,
-    echo=True,
-    pool_size=5,
-    max_overflow=20,
+    echo=False,
+    pool_size=30,
+    max_overflow=60,
     pool_timeout=30,
     pool_recycle=3600,
     pool_pre_ping=True,  # Ensures connections are alive
