@@ -70,6 +70,7 @@ class Settings(BaseSettings):
     debug: bool = False
     ignore_db: bool = False
     secret_key: str = "some-secret-key"  # TODO: SecretStr type
+    admin_access_key: str = "mealmap-admin"
 
     AWS_ACCESS_KEY_ID: str | None = os.environ.get("AWS_ACCESS_KEY_ID")
     AWS_SECRET_ACCESS_KEY: str | None = os.environ.get("AWS_SECRET_ACCESS_KEY")

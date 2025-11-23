@@ -1,251 +1,404 @@
+import math
 import uuid
-from typing import Any, Dict, List, Sequence, Set
+from typing import Dict, List, Sequence
 
-import numpy as np
-from fastapi.concurrency import run_in_threadpool
-from loguru import logger
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from sqlalchemy import and_, desc, func, not_, select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.db.models import Meal, MealReview, Place, Swipe, TriState, User, UserFeedItem
+from src.db.models import (
+    ComputedMealFeatures,
+    ComputedUserPreferences,
+    CuisineType,
+    Meal,
+    MealReview,
+    Place,
+    Swipe,
+    TriState,
+)
+from src.db.session import async_session_factory
+
+# Constants
+WEIGHT_TAGS = 0.50
+WEIGHT_CUISINE = 0.30
+WEIGHT_PRICE = 0.10
+WEIGHT_WAIT = 0.10
+LEARNING_RATE = 0.15
+ACCEL_MAX = 2.5
+ACCEL_DECAY = 0.2
+RECENCY_HALF_LIFE_DAYS = 90
+PRICE_BINS = [0, 5000, 10000, 15000, 20000, 30000, 50000]
+WAIT_BINS = [0, 10, 20, 30, 45, 60, 90]
 
 
 class RecommendationService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_user_feed(
-        self, user_id: uuid.UUID, limit: int = 10
-    ) -> Sequence[MealReview]:
+    async def update_meal_features(self, meal_id: uuid.UUID) -> None:
         """
-        Get the next batch of recommended meals for the user.
-        If the queue is empty, generates new recommendations.
+        Re-computes the feature vector for a meal based on all its reviews.
         """
-        # 1. Try to fetch from existing queue
+        # Fetch all reviews for the meal
         query = (
             select(MealReview)
-            .join(UserFeedItem, MealReview.id == UserFeedItem.meal_review_id)
-            .where(UserFeedItem.user_id == user_id)
-            .order_by(UserFeedItem.score.desc())
-            .limit(limit)
-            .options(
-                selectinload(MealReview.images),
-                selectinload(MealReview.meal).selectinload(Place.images),
-                selectinload(MealReview.user),
-            )
+            .where(MealReview.meal_id == meal_id)
+            .options(selectinload(MealReview.meal).selectinload(Meal.place))
         )
         result = await self.db.execute(query)
-        feed_items = result.scalars().all()
+        reviews = result.scalars().all()
 
-        if not feed_items:
-            logger.info(f"Feed empty for user {user_id}, generating recommendations...")
-            await self.generate_feed(user_id)
-            # Re-fetch
-            result = await self.db.execute(query)
-            feed_items = result.scalars().all()
-
-        return feed_items
-
-    async def generate_feed(self, user_id: uuid.UUID) -> None:
-        """
-        Populates UserFeedItem table with smart recommendations.
-        Uses a hybrid of Content-Based and Collaborative Filtering.
-        """
-        # 1. Get user's liked reviews (positive swipes) to build profile
-        liked_swipes_query = (
-            select(Swipe)
-            .where(and_(Swipe.user_id == user_id, Swipe.liked == True))
-            .options(selectinload(Swipe.meal_review).selectinload(MealReview.meal))
-        )
-        liked_swipes_res = await self.db.execute(liked_swipes_query)
-        liked_swipe_reviews = [s.meal_review for s in liked_swipes_res.scalars().all()]
-
-        # 1b. Get user's own high-rated reviews (Self-authored content indicates preference)
-        authored_reviews_query = (
-            select(MealReview)
-            .where(and_(MealReview.user_id == user_id, MealReview.rating >= 4))
-            .options(selectinload(MealReview.meal))
-        )
-        authored_reviews_res = await self.db.execute(authored_reviews_query)
-        authored_reviews = list(authored_reviews_res.scalars().all())
-
-        # Combine swipes and own reviews for the "User Profile"
-        # We use a set logic to avoid duplicates if one somehow swiped their own review
-        # Keep swipe reviews and authored reviews as separate lists so we can weight them differently downstream
-        preference_reviews = liked_swipe_reviews + authored_reviews
-
-        # 2. Identify what to exclude (already swiped)
-        swiped_ids_query = select(Swipe.meal_review_id).where(Swipe.user_id == user_id)
-        swiped_ids_res = await self.db.execute(swiped_ids_query)
-        swiped_ids = set(swiped_ids_res.scalars().all())
-        swiped_ids.update(
-            r.id for r in authored_reviews
-        )  # never recommend their own dishes
-
-        # 3. Collaborative Candidate Generation (Meals liked by similar users)
-        collab_boost_ids = set()
-        if preference_reviews:
-            liked_review_ids = [r.id for r in preference_reviews]
-
-            # Find users who liked what I liked
-            similar_users_query = (
-                select(Swipe.user_id)
-                .where(Swipe.meal_review_id.in_(liked_review_ids))
-                .where(Swipe.liked == True)
-                .where(Swipe.user_id != user_id)
-                .distinct()
-                .limit(50)
+        # If no reviews, we still need to update features based on Meal/Place attributes
+        # (e.g. price, cuisine)
+        # So we fetch the meal directly if reviews are empty
+        if not reviews:
+            meal_query = (
+                select(Meal).where(Meal.id == meal_id).options(selectinload(Meal.place))
             )
-            similar_users_res = await self.db.execute(similar_users_query)
-            similar_user_ids = similar_users_res.scalars().all()
+            meal_res = await self.db.execute(meal_query)
+            meal = meal_res.scalars().first()
+            if not meal:
+                return
+        else:
+            meal = reviews[0].meal
 
-            if similar_user_ids:
-                # Find meals liked by those users that I haven't seen
-                collab_candidates_query = (
-                    select(MealReview.id)
-                    .join(Swipe, MealReview.id == Swipe.meal_review_id)
-                    .where(Swipe.user_id.in_(similar_user_ids))
-                    .where(Swipe.liked == True)
-                    .where(MealReview.id.notin_(swiped_ids))
-                    .group_by(MealReview.id)
-                    .order_by(func.count(Swipe.user_id).desc())
-                    .limit(30)
-                )
-                collab_res = await self.db.execute(collab_candidates_query)
-                collab_boost_ids = set(collab_res.scalars().all())
+        # 1. Tag Aggregation
+        tag_vector = {}
+        tags = [
+            "is_vegan",
+            "is_halal",
+            "is_vegetarian",
+            "is_spicy",
+            "is_gluten_free",
+            "is_dairy_free",
+            "is_nut_free",
+        ]
 
-        # 4. Content Candidates (General pool + Collab candidates)
-        # We fetch a pool of candidates to rank.
-        # Include collab candidates and some random/recent popular ones to ensure variety.
+        for tag in tags:
+            score = 0.0
+            count = 0
+            for r in reviews:
+                val = getattr(r, tag)
+                if val == TriState.yes:
+                    score += 1.0
+                    count += 1
+                elif val == TriState.no:
+                    score -= 1.0
+                    count += 1
+                # unspecified is 0
 
-        # Ensure we don't exclude if swiped_ids is empty (SQLAlchemy handles empty IN/NOT IN gracefully usually, but safe check)
-        # Using run_in_threadpool for heavy lifting later, but fetching data is async IO
+            if len(reviews) > 0:
+                tag_vector[tag] = score / len(reviews)
+            else:
+                tag_vector[tag] = 0.0
 
-        candidates_query = (
-            select(MealReview)
-            .where(MealReview.id.notin_(swiped_ids))
-            .where(MealReview.user_id != user_id)
-            .order_by(MealReview.created_at.desc())  # Bias recency for pool
-            .limit(100)
-            .options(selectinload(MealReview.meal))
-        )
-        candidates_res = await self.db.execute(candidates_query)
-        candidates = list(candidates_res.scalars().all())
+        # 2. Cuisine Aggregation
+        cuisine_vector = {}
+        if meal.place.cuisine and meal.place.cuisine != CuisineType.unspecified:
+            c = meal.place.cuisine.lower().strip()
+            cuisine_vector[c] = 1.0
 
-        # If we have collab candidates that weren't in the top 100 recent, fetch them specifically
-        missing_collab_ids = collab_boost_ids - {c.id for c in candidates}
-        if missing_collab_ids:
-            extra_query = (
-                select(MealReview)
-                .where(MealReview.id.in_(missing_collab_ids))
-                .options(selectinload(MealReview.meal))
-            )
-            extra_res = await self.db.execute(extra_query)
-            candidates.extend(extra_res.scalars().all())
+        # 3. Scalar Aggregation
+        prices = [r.price for r in reviews if r.price is not None]
+        avg_price = sum(prices) / len(prices) if prices else (meal.price or 0.0)
 
-        if not candidates:
-            return
+        wait_times = [
+            r.waiting_time_minutes
+            for r in reviews
+            if r.waiting_time_minutes is not None
+        ]
+        avg_wait_time = sum(wait_times) / len(wait_times) if wait_times else 0.0
 
-        # 5. Calculate Scores (Hybrid)
-        scores = await run_in_threadpool(
-            self._calculate_affinity_scores,
-            liked_swipe_reviews,
-            authored_reviews,
-            candidates,
-            collab_boost_ids,
-        )
+        # Update or Create ComputedMealFeatures
+        computed = await self.db.get(ComputedMealFeatures, meal_id)
+        if not computed:
+            computed = ComputedMealFeatures(meal_id=meal_id)
+            self.db.add(computed)
 
-        # 6. Store Recommendations
-        # Clear old queue? Or append?
-        # For now, we append.
-
-        # Sort by score
-        top_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:20]
-
-        for review_id, score in top_candidates:
-            # Check uniqueness again just in case (race conditions)
-            exists_query = select(UserFeedItem).where(
-                and_(
-                    UserFeedItem.user_id == user_id,
-                    UserFeedItem.meal_review_id == review_id,
-                )
-            )
-            exists = (await self.db.execute(exists_query)).first()
-            if not exists:
-                feed_item = UserFeedItem(
-                    user_id=user_id, meal_review_id=review_id, score=float(score)
-                )
-                self.db.add(feed_item)
+        computed.tag_vector = tag_vector
+        computed.cuisine_vector = cuisine_vector
+        computed.avg_price = avg_price
+        computed.avg_wait_time = avg_wait_time
+        computed.review_count = len(reviews)
 
         await self.db.commit()
 
-    def _calculate_affinity_scores(
-        self,
-        swipe_likes: List[MealReview],
-        authored_reviews: List[MealReview],
-        candidates: List[MealReview],
-        collab_ids: Set[uuid.UUID],
-        authored_weight: int = 25,
-    ) -> Dict[uuid.UUID, float]:
-        # Base scores: Rating (heavier weight now that we rely on stars)
-        scores = {c.id: float(c.rating) for c in candidates}
+    async def update_place_meals_features(self, place_id: uuid.UUID) -> None:
+        """
+        Re-computes features for all meals in a place.
+        Useful when place attributes (like cuisine) change.
+        """
+        query = select(Meal.id).where(Meal.place_id == place_id)
+        result = await self.db.execute(query)
+        meal_ids = result.scalars().all()
 
-        # Collaborative Boost
-        for cid in scores:
-            if cid in collab_ids:
-                scores[cid] += 2.0  # Significant boost for collaborative matches
+        for meal_id in meal_ids:
+            await self.update_meal_features(meal_id)
 
-        profile_reviews: List[MealReview] = swipe_likes + authored_reviews * max(
-            authored_weight, 1
+    async def update_user_preferences(
+        self, user_id: uuid.UUID, signal_strength: float, meal_id: uuid.UUID
+    ):
+        """
+        Updates user preference vector based on an interaction (Swipe or Review).
+        """
+        # Fetch ComputedMealFeatures
+        meal_features = await self.db.get(ComputedMealFeatures, meal_id)
+        if not meal_features:
+            # If not computed yet, compute it now
+            await self.update_meal_features(meal_id)
+            meal_features = await self.db.get(ComputedMealFeatures, meal_id)
+            if not meal_features:
+                return  # Should not happen if meal exists
+
+        # Fetch ComputedUserPreferences
+        user_prefs = await self.db.get(ComputedUserPreferences, user_id)
+        if not user_prefs:
+            user_prefs = ComputedUserPreferences(
+                user_id=user_id,
+                tag_prefs={},
+                cuisine_prefs={},
+                price_bin_prefs={},
+                wait_bin_prefs={},
+            )
+            self.db.add(user_prefs)
+
+        # Real-time update, so time decay is 1.0 (t=0)
+        w_time = 1.0
+
+        # Update Logic
+        def update_feature_group(prefs_dict, feature_vector):
+            new_prefs = dict(prefs_dict)  # Copy
+            for key, val in feature_vector.items():
+                # Spec: Meal Strength |S_m| > 0.2
+                if abs(val) <= 0.2:
+                    continue
+
+                # Get current pref
+                current = new_prefs.get(key, {"val": 0.0, "count": 0})
+                old_val = current["val"]
+                count = current["count"]
+
+                # Cold Start Multiplier
+                multiplier = 1 + (ACCEL_MAX * math.exp(-ACCEL_DECAY * count))
+
+                # Effective Signal
+                effective_signal = signal_strength * w_time * val
+
+                # Delta Update
+                new_val = old_val + LEARNING_RATE * multiplier * (
+                    effective_signal - old_val
+                )
+
+                # Clamp
+                new_val = max(-1.0, min(1.0, new_val))
+
+                new_prefs[key] = {"val": new_val, "count": count + 1}
+            return new_prefs
+
+        # Update Tags
+        user_prefs.tag_prefs = update_feature_group(
+            user_prefs.tag_prefs, meal_features.tag_vector
         )
 
-        if not profile_reviews:
-            # Cold start: rely on rating and collab
-            return scores
+        # Update Cuisines
+        user_prefs.cuisine_prefs = update_feature_group(
+            user_prefs.cuisine_prefs, meal_features.cuisine_vector
+        )
 
-        # Content-Based Filtering (TF-IDF on text + tags)
-        def extract_features(review: MealReview) -> str:
-            tags = [
-                "vegan" if review.is_vegan == TriState.yes else "",
-                "halal" if review.is_halal == TriState.yes else "",
-                "vegetarian" if review.is_vegetarian == TriState.yes else "",
-                "spicy" if review.is_spicy == TriState.yes else "",
-            ]
-            # Weight the meal name heavily
-            text_content = f"{review.meal.name} {review.meal.name} {review.text or ''}"
-            return f"{text_content} {' '.join(tags)}"
+        # Update Price (Scalar to Soft Bin)
+        price_vector = self._scalar_to_soft_bin(meal_features.avg_price, PRICE_BINS)
+        user_prefs.price_bin_prefs = update_feature_group(
+            user_prefs.price_bin_prefs, price_vector
+        )
 
-        liked_docs = [extract_features(r) for r in profile_reviews]
-        candidate_docs = [extract_features(r) for r in candidates]
+        # Update Wait Time (Scalar to Soft Bin)
+        wait_vector = self._scalar_to_soft_bin(meal_features.avg_wait_time, WAIT_BINS)
+        user_prefs.wait_bin_prefs = update_feature_group(
+            user_prefs.wait_bin_prefs, wait_vector
+        )
 
-        # TF-IDF Vectorization
-        # min_df=1 because we might have small dataset
-        vectorizer = TfidfVectorizer(stop_words="english", min_df=1)
-        all_docs = liked_docs + candidate_docs
+        # Force update of JSONB fields (SQLAlchemy sometimes doesn't detect changes in mutable dicts)
+        from sqlalchemy.orm.attributes import flag_modified
 
-        try:
-            tfidf_matrix = vectorizer.fit_transform(all_docs)
+        flag_modified(user_prefs, "tag_prefs")
+        flag_modified(user_prefs, "cuisine_prefs")
+        flag_modified(user_prefs, "price_bin_prefs")
+        flag_modified(user_prefs, "wait_bin_prefs")
 
-            liked_vecs = tfidf_matrix[: len(liked_docs)]
-            candidate_vecs = tfidf_matrix[len(liked_docs) :]
+        await self.db.commit()
 
-            # Similarity: (n_candidates, n_liked)
-            similarity_matrix = cosine_similarity(candidate_vecs, liked_vecs)
+    def _scalar_to_soft_bin(self, value: float, bins: List[int]) -> Dict[str, float]:
+        target_bin = 0
+        for i in range(len(bins) - 1):
+            if bins[i] <= value < bins[i + 1]:
+                target_bin = i
+                break
+        if value >= bins[-1]:
+            target_bin = len(bins) - 1
 
-            # Mean similarity score (can also use max for "most similar to something I liked")
-            # Using Max is often better for "finding something similar to my favorite dish"
-            content_scores = similarity_matrix.max(axis=1)
+        vector = {}
+        vector[f"r{target_bin}"] = 1.0
+        if target_bin > 0:
+            vector[f"r{target_bin-1}"] = 0.25
+        if target_bin < len(bins) - 1:
+            vector[f"r{target_bin+1}"] = 0.25
 
-            # Normalize and add to scores
-            # content_scores is numpy array
-            for i, candidate in enumerate(candidates):
-                # Scale content score (0-1 usually) to be comparable to our other components
-                scores[candidate.id] += content_scores[i] * 3.0
+        return vector
 
-        except ValueError as e:
-            logger.warning(f"Error in TF-IDF (likely empty vocabulary): {e}")
+    async def get_recommendations(
+        self, user_id: uuid.UUID, limit: int = 20
+    ) -> Sequence[Meal]:
+        """
+        Generates feed items for the user based on similarity scores on the fly.
+        Returns a list of Meal objects.
+        """
+        # 1. Fetch User Preferences
+        user_prefs = await self.db.get(ComputedUserPreferences, user_id)
+        if not user_prefs:
+            # No prefs, return recent meals as fallback
+            query = (
+                select(Meal)
+                .order_by(Meal.created_at.desc())
+                .limit(limit)
+                .options(
+                    selectinload(Meal.place),
+                    selectinload(Meal.meal_reviews).selectinload(MealReview.images),
+                )
+            )
+            result = await self.db.execute(query)
+            return result.scalars().all()
 
-        return scores
+        # 2. Fetch Candidate Meals (ComputedMealFeatures)
+        # Exclude already swiped meals
+        swiped_meals_query = select(Swipe.meal_id).where(Swipe.user_id == user_id)
+
+        # Also exclude meals the user has reviewed
+        reviewed_meals_query = select(MealReview.meal_id).where(
+            MealReview.user_id == user_id
+        )
+
+        # Fetch candidates
+        # We fetch ComputedMealFeatures directly
+        query = (
+            select(ComputedMealFeatures)
+            .where(
+                and_(
+                    ComputedMealFeatures.meal_id.notin_(swiped_meals_query),
+                    ComputedMealFeatures.meal_id.notin_(reviewed_meals_query),
+                )
+            )
+            .limit(500)
+        )  # Limit candidate pool for performance
+
+        result = await self.db.execute(query)
+        candidates = result.scalars().all()
+
+        scores = []
+        for candidate in candidates:
+            score = self._calculate_similarity(user_prefs, candidate)
+            scores.append((candidate.meal_id, score))
+
+        # Sort by score
+        scores.sort(key=lambda x: x[1], reverse=True)
+        top_candidates = scores[:limit]
+
+        # Fetch Meal objects for the top candidates
+        top_meal_ids = [x[0] for x in top_candidates]
+        if not top_meal_ids:
+            return []
+
+        meal_query = (
+            select(Meal)
+            .where(Meal.id.in_(top_meal_ids))
+            .options(
+                selectinload(Meal.place),
+                selectinload(Meal.meal_reviews).selectinload(MealReview.images),
+            )
+        )
+        meal_res = await self.db.execute(meal_query)
+        meals = meal_res.scalars().all()
+
+        # Sort meals based on the order in top_meal_ids
+        meal_map = {m.id: m for m in meals}
+        recommendations = []
+        for meal_id in top_meal_ids:
+            if meal_id in meal_map:
+                recommendations.append(meal_map[meal_id])
+
+        return recommendations
+
+    def _calculate_similarity(
+        self,
+        user_prefs: ComputedUserPreferences,
+        meal_features: ComputedMealFeatures,
+    ) -> float:
+        def cosine_sim(vec1: Dict, vec2: Dict) -> float:
+            # vec1 is user prefs: {key: {val: float, count: int}}
+            # vec2 is meal features: {key: float}
+
+            dot_product = 0.0
+            norm1 = 0.0
+            norm2 = 0.0
+
+            # Keys in vec1
+            for key, pref in vec1.items():
+                val1 = pref["val"]
+                norm1 += val1**2
+                if key in vec2:
+                    val2 = vec2[key]
+                    dot_product += val1 * val2
+
+            # Keys in vec2 (for norm2)
+            for val in vec2.values():
+                norm2 += val**2
+
+            if norm1 == 0 or norm2 == 0:
+                return 0.0
+
+            return dot_product / (math.sqrt(norm1) * math.sqrt(norm2))
+
+        # Tags
+        sim_tags = cosine_sim(user_prefs.tag_prefs, meal_features.tag_vector)
+
+        # Cuisine
+        sim_cuisine = cosine_sim(user_prefs.cuisine_prefs, meal_features.cuisine_vector)
+
+        # Price
+        price_vec = self._scalar_to_soft_bin(meal_features.avg_price, PRICE_BINS)
+        sim_price = cosine_sim(user_prefs.price_bin_prefs, price_vec)
+
+        # Wait
+        wait_vec = self._scalar_to_soft_bin(meal_features.avg_wait_time, WAIT_BINS)
+        sim_wait = cosine_sim(user_prefs.wait_bin_prefs, wait_vec)
+
+        final_score = (
+            sim_tags * WEIGHT_TAGS
+            + sim_cuisine * WEIGHT_CUISINE
+            + sim_price * WEIGHT_PRICE
+            + sim_wait * WEIGHT_WAIT
+        )
+
+        return final_score
+
+
+async def update_meal_features_background(meal_id: uuid.UUID) -> None:
+    """Background task wrapper for updating meal features."""
+    async with async_session_factory() as session:
+        service = RecommendationService(session)
+        await service.update_meal_features(meal_id)
+
+
+async def update_place_meals_features_background(place_id: uuid.UUID) -> None:
+    """Background task wrapper for updating all meals in a place."""
+    async with async_session_factory() as session:
+        service = RecommendationService(session)
+        await service.update_place_meals_features(place_id)
+
+
+async def update_user_preferences_background(
+    user_id: uuid.UUID, signal_strength: float, meal_id: uuid.UUID
+) -> None:
+    """Background task wrapper for updating user preferences."""
+    async with async_session_factory() as session:
+        service = RecommendationService(session)
+        await service.update_user_preferences(user_id, signal_strength, meal_id)

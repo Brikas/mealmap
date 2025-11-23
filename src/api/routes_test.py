@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Any, Dict
+
+from fastapi import APIRouter, Depends
 from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +11,7 @@ router = APIRouter()
 
 
 @router.get("/test")
-async def hello_world():
+async def hello_world() -> Dict[str, str]:
     """
     Simple hello world route to test connection.
     """
@@ -19,7 +21,7 @@ async def hello_world():
 @router.get("/test/db")
 async def test_db_connection(
     db: AsyncSession = Depends(get_async_db_session),
-):
+) -> Dict[str, Any]:
     """
     Test database connection.
 

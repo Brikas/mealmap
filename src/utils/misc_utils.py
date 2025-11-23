@@ -1,6 +1,10 @@
 import math
+from collections import Counter
+from typing import List
 
 from fastapi import Form
+
+from src.db.models import MealReview, TriState
 
 
 def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -62,3 +66,21 @@ def form_body(cls: type) -> type:
     cls.__signature__ = cls.__signature__.replace(parameters=params)
 
     return cls
+
+
+def calculate_majority_tag(reviews: List[MealReview], attr_name: str) -> str:
+    values = [
+        getattr(r, attr_name).value
+        for r in reviews
+        if getattr(r, attr_name) != TriState.unspecified
+    ]
+    if not values:
+        return "unspecified"
+    counts = Counter(values)
+    yes_count = counts.get("yes", 0)
+    no_count = counts.get("no", 0)
+    if yes_count > no_count:
+        return "yes"
+    elif no_count > yes_count:
+        return "no"
+    return "unspecified"

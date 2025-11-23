@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Dict, List, Literal, Optional
 
 from fastapi import (
@@ -32,6 +33,7 @@ from src.api.dependencies import get_current_user
 
 # Import schemas from reviews route (assuming no circular dependency issues for schemas)
 # If this fails, we might need to move schemas to common_schemas.py
+from src.api.routes_meals import MealResponse, MealTags
 from src.api.routes_reviews import (
     PlaceBasicInfo,
     ReviewResponse,
@@ -42,6 +44,7 @@ from src.db.models import MealReview, MealReviewImage, Place, User
 from src.db.session import get_async_db_session
 from src.services import image_processing, storage
 from src.services.recommendation import RecommendationService
+from src.utils.misc_utils import calculate_majority_tag
 from src.utils.pagination import Page, PaginationInput, paginate_query
 
 router = APIRouter()
@@ -365,85 +368,94 @@ async def change_password(
     # Optionally: send notification email here
 
 
-@router.get("/users/me/feed", response_model=List[ReviewResponse])
+@router.get("/users/me/feed", response_model=List[MealResponse])
 async def get_my_feed(
     current_user: Annotated[User, Depends(get_current_user)],
-    limit: int = Query(10, ge=1, le=50),
+    limit: int = Query(3, ge=1, le=50),
     db: AsyncSession = Depends(get_async_db_session),
-) -> List[ReviewResponse]:
+) -> List[MealResponse]:
     """
     Get personalized meal feed for the current user.
     """
     service = RecommendationService(db)
-    reviews = await service.get_user_feed(current_user.id, limit=limit)
+    meals = await service.get_recommendations(current_user.id, limit=limit)
 
     results = []
-    for review in reviews:
-        meal = review.meal
+    now = datetime.now(timezone.utc)
+
+    for meal in meals:
+        reviews = meal.meal_reviews
         place = meal.place
-        user = review.user
 
-        # Get first image
-        first_review_image = None
-        image_count = len(review.images)
-        if review.images:
-            sorted_images = sorted(review.images, key=lambda i: i.sequence_index)
-            first_review_image = BackendImageResponse(
-                id=sorted_images[0].id,
-                image_url=storage.generate_presigned_url(sorted_images[0].image_path),
-                sequence_index=sorted_images[0].sequence_index,
-            )
+        review_count = len(reviews)
+        avg_rating = (
+            sum(r.rating for r in reviews) / review_count if review_count > 0 else None
+        )
 
-        # Get first place image
-        first_place_image = None
-        if place.images:
-            sorted_place_images = sorted(place.images, key=lambda i: i.sequence_index)
-            first_place_image = BackendImageResponse(
-                id=sorted_place_images[0].id,
-                image_url=storage.generate_presigned_url(
-                    sorted_place_images[0].image_path
-                ),
-                sequence_index=sorted_place_images[0].sequence_index,
-            )
+        waiting_times = [
+            r.waiting_time_minutes
+            for r in reviews
+            if r.waiting_time_minutes is not None
+        ]
+        avg_waiting_time = (
+            sum(waiting_times) / len(waiting_times) if waiting_times else None
+        )
+
+        prices = [r.price for r in reviews if r.price is not None]
+        avg_price = sum(prices) / len(prices) if prices else None
+
+        is_vegan = calculate_majority_tag(reviews, "is_vegan")
+        is_halal = calculate_majority_tag(reviews, "is_halal")
+        is_vegetarian = calculate_majority_tag(reviews, "is_vegetarian")
+        is_spicy = calculate_majority_tag(reviews, "is_spicy")
+        is_gluten_free = calculate_majority_tag(reviews, "is_gluten_free")
+        is_dairy_free = calculate_majority_tag(reviews, "is_dairy_free")
+        is_nut_free = calculate_majority_tag(reviews, "is_nut_free")
+
+        is_new = False
+        if meal.created_at:
+            created_at = meal.created_at
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            is_new = (now - created_at) < timedelta(days=14)
+
+        first_image = None
+        sorted_reviews = sorted(reviews, key=lambda r: r.created_at, reverse=True)
+        for r in sorted_reviews:
+            if r.images:
+                sorted_imgs = sorted(r.images, key=lambda i: i.sequence_index)
+                first_image = BackendImageResponse(
+                    id=sorted_imgs[0].id,
+                    image_url=storage.generate_presigned_url(sorted_imgs[0].image_path),
+                    sequence_index=sorted_imgs[0].sequence_index,
+                )
+                break
 
         results.append(
-            ReviewResponse(
-                id=review.id,
-                meal_id=meal.id,
-                meal_name=meal.name,
-                rating=review.rating,
-                text=review.text,
-                waiting_time_minutes=review.waiting_time_minutes,
-                price=review.price,
-                test_id=review.test_id,
-                tags=ReviewTags(
-                    is_vegan=review.is_vegan.value,
-                    is_halal=review.is_halal.value,
-                    is_vegetarian=review.is_vegetarian.value,
-                    is_spicy=review.is_spicy.value,
-                    is_gluten_free=review.is_gluten_free.value,
-                    is_dairy_free=review.is_dairy_free.value,
-                    is_nut_free=review.is_nut_free.value,
-                ),
-                image_count=image_count,
-                first_image=first_review_image,
-                place=PlaceBasicInfo(
-                    id=place.id,
-                    name=place.name,
-                    address=place.address,
-                    latitude=place.lat,
-                    longitude=place.lng,
-                    first_image=first_place_image,
-                ),
-                user=UserBasicInfo(
-                    id=user.id,
-                    first_name=user.first_name,
-                    last_name=user.last_name,
-                    image_url=storage.generate_presigned_url_or_none(user.image_path),
-                ),
-                created_at=review.created_at.isoformat(),
-                # distance is None for feed
+            MealResponse(
+                id=meal.id,
+                name=meal.name,
+                price=meal.price,
+                place_id=meal.place_id,
+                place_name=place.name,
+                avg_rating=avg_rating,
+                review_count=review_count,
+                avg_waiting_time=avg_waiting_time,
+                avg_price=avg_price,
+                first_image=first_image,
                 distance_meters=None,
+                is_new=is_new,
+                is_popular=False,
+                tags=MealTags(
+                    is_vegan=is_vegan,
+                    is_halal=is_halal,
+                    is_vegetarian=is_vegetarian,
+                    is_spicy=is_spicy,
+                    is_gluten_free=is_gluten_free,
+                    is_dairy_free=is_dairy_free,
+                    is_nut_free=is_nut_free,
+                ),
+                test_id=meal.test_id,
             )
         )
 

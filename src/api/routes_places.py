@@ -28,9 +28,13 @@ from src.api.common_schemas import (
     ObjectCreationResponse,
 )
 from src.api.dependencies import get_current_user
-from src.db.models import Meal, Place, PlaceImage, User
+from src.db.models import CuisineType, Meal, Place, PlaceImage, User
 from src.db.session import get_async_db_session
 from src.services import image_processing, storage
+from src.services.recommendation import (
+    RecommendationService,
+    update_place_meals_features_background,
+)
 from src.utils.misc_utils import calculate_distance
 from src.utils.pagination import Page, PaginationInput, paginate_list
 
@@ -47,7 +51,15 @@ class PlaceResponse(BaseModel):
     longitude: Optional[float] = None
     average_rating: Optional[float] = None
     review_count: Optional[int] = None
-    cuisine: Optional[str] = None
+    cuisine: Optional[CuisineType] = Field(
+        None,
+        description=(
+            "Cuisine type of the place. Possible values: italian, french, spanish, "
+            "greek, british, chinese, japanese, korean, thai, vietnamese, indian, "
+            "filipino, american, mexican, mediterranean, african, fusion, cafe, "
+            "bakery, barbecue, seafood, vegetarian_vegan, other, unspecified"
+        ),
+    )
     test_id: Optional[str] = None
 
 
@@ -68,7 +80,17 @@ async def create_place(
     latitude: Annotated[float, Form()],
     longitude: Annotated[float, Form()],
     address: Annotated[Optional[str], Form()] = None,
-    cuisine: Annotated[Optional[str], Form()] = None,
+    cuisine: Annotated[
+        Optional[CuisineType],
+        Form(
+            description=(
+                "Cuisine type of the place. Possible values: italian, french, spanish, "
+                "greek, british, chinese, japanese, korean, thai, vietnamese, indian, "
+                "filipino, american, mexican, mediterranean, african, fusion, cafe, "
+                "bakery, barbecue, seafood, vegetarian_vegan, other, unspecified"
+            )
+        ),
+    ] = None,
     test_id: Annotated[Optional[str], Form()] = None,
     images: Optional[List[UploadFile]] = None,
     current_user: User = Depends(get_current_user),
@@ -236,6 +258,7 @@ async def list_places(
                 longitude=place.lng,
                 average_rating=item["avg_rating"],
                 review_count=item["review_count"],
+                cuisine=place.cuisine,
                 test_id=place.test_id,
             )
         )
@@ -315,6 +338,7 @@ async def get_place_details(
         longitude=place.lng,
         average_rating=avg_rating,
         review_count=review_count,
+        cuisine=place.cuisine,
         address=place.address,
         created_at=place.created_at.isoformat(),
         updated_at=place.updated_at.isoformat(),
@@ -323,23 +347,47 @@ async def get_place_details(
     )
 
 
+@router.delete("/places/{place_id}", response_model=MessageResponse)
+async def delete_place(
+    place_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db_session),
+) -> MessageResponse:
+    """Delete a place."""
+    place = await db.get(Place, place_id)
+    if not place:
+        raise HTTPException(status_code=404, detail="Place not found")
+
+    await db.delete(place)
+    await db.commit()
+    return MessageResponse(message="Place deleted successfully")
+
+
 @router.put("/places/{place_id}", response_model=MessageResponse)
 async def update_place(
     place_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     name: Annotated[Optional[str], Form()] = None,
     address: Annotated[Optional[str], Form()] = None,
-    cuisine: Annotated[Optional[str], Form()] = None,
+    cuisine: Annotated[
+        Optional[CuisineType],
+        Form(
+            description=(
+                "Cuisine type of the place. Possible values: italian, french, spanish, "
+                "greek, british, chinese, japanese, korean, thai, vietnamese, indian, "
+                "filipino, american, mexican, mediterranean, african, fusion, cafe, "
+                "bakery, barbecue, seafood, vegetarian_vegan, other, unspecified"
+            )
+        ),
+    ] = None,
     add_images: Optional[List[UploadFile]] = None,
     test_id: Annotated[Optional[str], Form()] = None,
     remove_image_ids: Annotated[Optional[str], Form()] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db_session),
 ) -> MessageResponse:
-    """Update a place with approval logic.
-
-    - Any user can instantly add/append new attributes (address, images)
-    - Admin verification needed for editing/deleting existing attributes
-    """
+    """Update a place."""
+    service = RecommendationService(db)
     if add_images is None:
         add_images = []
 
@@ -351,33 +399,22 @@ async def update_place(
     if not place:
         raise HTTPException(status_code=404, detail="Place not found")
 
-    approval_needed = []
+    if name is not None:
+        place.name = name
 
-    # Handle name update (requires approval if editing existing)
-    if name is not None and name != place.name:
-        approval_needed.append("name edit")
-        # Don't apply the change yet - would require admin approval system
-
-    # Handle address update (can add if empty, edit requires approval)
     if address is not None:
-        if not place.address or place.address == "":
-            place.address = address
-        elif address != place.address:
-            approval_needed.append("address edit")
-            # Don't apply the change yet
+        place.address = address
 
-    # Handle cuisine update
     if cuisine is not None:
-        if not place.cuisine:
+        if place.cuisine != cuisine:
             place.cuisine = cuisine
-        elif place.cuisine != cuisine:
-            approval_needed.append(f"cuisine: {cuisine}")
+            # Trigger background update of meal features for this place
+            background_tasks.add_task(update_place_meals_features_background, place_id)
 
     if test_id is not None:
-        # Directly allow test_id updates
         place.test_id = test_id
 
-    # Handle image additions (allowed instantly)
+    # Handle image additions
     if add_images:
         if len(add_images) > 5:
             raise HTTPException(
@@ -399,7 +436,7 @@ async def update_place(
                 logger.error(f"Error processing image {img.filename}: {e}")
                 raise HTTPException(
                     status_code=400, detail=f"Invalid image file: {img.filename}"
-                )
+                ) from e
 
             object_name = storage.generate_image_object_name(
                 storage.ObjectDescriptor.IMAGE_PLACE
@@ -414,25 +451,25 @@ async def update_place(
             )
             db.add(img_obj)
 
-    # Handle image deletions (requires approval)
+    # Handle image deletions
     if remove_image_ids:
         try:
             ids_to_remove = [
                 uuid.UUID(id_str) for id_str in remove_image_ids.split(",")
             ]
             if ids_to_remove:
-                approval_needed.append("image deletion")
-                # Don't apply deletions yet
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid image ID format")
+                stmt = select(PlaceImage).where(
+                    PlaceImage.id.in_(ids_to_remove), PlaceImage.place_id == place_id
+                )
+                imgs_to_delete = (await db.execute(stmt)).scalars().all()
+                for img in imgs_to_delete:
+                    await db.delete(img)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400, detail="Invalid image ID format"
+            ) from e
 
     db.add(place)
     await db.commit()
 
-    message = "Place updated successfully."
-    if approval_needed:
-        message += (
-            f" Admin approval needed for: {', '.join(approval_needed)} (unimplemented)"
-        )
-
-    return MessageResponse(message=message)
+    return MessageResponse(message="Place updated successfully.")

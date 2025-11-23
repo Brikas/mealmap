@@ -989,6 +989,7 @@ def get_places():
             "latitude": 36.3714,
             "longitude": 127.3650,
             "test_id": "kaist-duck-pond-cafe",
+            "cuisine": "cafe",
             "images": img_index["generic-cafe"],
         },
         {
@@ -997,6 +998,7 @@ def get_places():
             "latitude": 36.3685,
             "longitude": 127.3590,
             "test_id": "bon-juk-restaurant",
+            "cuisine": "korean",
         },
         {
             "name": "Subway KAIST Station",
@@ -1004,6 +1006,7 @@ def get_places():
             "latitude": 36.3742,
             "longitude": 127.3688,
             "test_id": "subway-kaist",
+            "cuisine": "american",
         },
         {
             "name": "Mom's Touch Chicken",
@@ -1011,6 +1014,7 @@ def get_places():
             "latitude": 36.3695,
             "longitude": 127.3605,
             "test_id": "moms-touch-chicken",
+            "cuisine": "korean",
             "images": img_index["generic-chicken"],
         },
         {
@@ -1019,6 +1023,7 @@ def get_places():
             "latitude": 36.3690,
             "longitude": 127.3598,
             "test_id": "gongcha-bubbletea",
+            "cuisine": "cafe",
         },
         {
             "name": "Caffe Bene KAIST",
@@ -1026,6 +1031,7 @@ def get_places():
             "latitude": 36.3720,
             "longitude": 127.3655,
             "test_id": "caffe-bene-kaist",
+            "cuisine": "cafe",
         },
         {
             "name": "Kyochon Chicken",
@@ -1033,6 +1039,7 @@ def get_places():
             "latitude": 36.3700,
             "longitude": 127.3612,
             "test_id": "kyochon-chicken",
+            "cuisine": "korean",
         },
         {
             "name": "Paris Baguette KAIST",
@@ -1040,6 +1047,7 @@ def get_places():
             "latitude": 36.3688,
             "longitude": 127.3593,
             "test_id": "paris-baguette-kaist",
+            "cuisine": "bakery",
         },
         {
             "name": "BBQ Chicken Daehak",
@@ -1047,6 +1055,7 @@ def get_places():
             "latitude": 36.3693,
             "longitude": 127.3602,
             "test_id": "bbq-chicken-daehak",
+            "cuisine": "korean",
         },
         {
             "name": "Burger King KAIST",
@@ -1054,6 +1063,7 @@ def get_places():
             "latitude": 36.3730,
             "longitude": 127.3670,
             "test_id": "burger-king-kaist",
+            "cuisine": "american",
             "images": img_index["generic-burger"],
         },
         {
@@ -1062,6 +1072,7 @@ def get_places():
             "latitude": 36.3698,
             "longitude": 127.3608,
             "test_id": "twosome-place",
+            "cuisine": "cafe",
         },
         {
             "name": "Pizza School",
@@ -1069,6 +1080,7 @@ def get_places():
             "latitude": 36.3682,
             "longitude": 127.3585,
             "test_id": "pizza-school",
+            "cuisine": "american",
             "images": img_index["generic-pizza"],
         },
         {
@@ -1077,6 +1089,7 @@ def get_places():
             "latitude": 36.3716,
             "longitude": 127.3652,
             "test_id": "starbucks-kaist",
+            "cuisine": "cafe",
         },
         {
             "name": "Korean BBQ House Samgyeopsal",
@@ -1084,6 +1097,7 @@ def get_places():
             "latitude": 36.3702,
             "longitude": 127.3615,
             "test_id": "samgyeopsal-house",
+            "cuisine": "korean",
             "images": img_index["generic-korean-bbq"],
         },
         {
@@ -1092,6 +1106,7 @@ def get_places():
             "latitude": 36.3686,
             "longitude": 127.3595,
             "test_id": "angelinus-coffee",
+            "cuisine": "cafe",
         },
         {
             "name": "Lotteria Fast Food",
@@ -1099,6 +1114,7 @@ def get_places():
             "latitude": 36.3692,
             "longitude": 127.3600,
             "test_id": "lotteria-fastfood",
+            "cuisine": "american",
         },
         {
             "name": "Kimbap Heaven",
@@ -1106,6 +1122,7 @@ def get_places():
             "latitude": 36.3680,
             "longitude": 127.3582,
             "test_id": "kimbap-heaven",
+            "cuisine": "korean",
         },
         {
             "name": "Tom N Toms Coffee",
@@ -1113,6 +1130,7 @@ def get_places():
             "latitude": 36.3705,
             "longitude": 127.3618,
             "test_id": "tom-n-toms",
+            "cuisine": "cafe",
         },
         {
             "name": "Ediya Coffee Shop",
@@ -1120,6 +1138,7 @@ def get_places():
             "latitude": 36.3684,
             "longitude": 127.3588,
             "test_id": "ediya-coffee",
+            "cuisine": "cafe",
         },
         {
             "name": "Domino's Pizza KAIST",
@@ -1127,5 +1146,6 @@ def get_places():
             "latitude": 36.3735,
             "longitude": 127.3675,
             "test_id": "dominos-pizza-kaist",
+            "cuisine": "american",
         },
     ]

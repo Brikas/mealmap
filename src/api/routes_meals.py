@@ -1,11 +1,18 @@
 import uuid
-from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, List, Literal, Optional
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Form,
+    HTTPException,
+    Query,
+    status,
+)
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import String, cast, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -15,10 +22,14 @@ from src.api.common_schemas import (
     ObjectCreationResponse,
 )
 from src.api.dependencies import get_current_user
-from src.db.models import Meal, MealReview, Place, TriState, User
+from src.db.models import Meal, MealReview, Place, User
 from src.db.session import get_async_db_session
 from src.services import storage
-from src.utils.misc_utils import calculate_distance
+from src.services.recommendation import (
+    RecommendationService,
+    update_meal_features_background,
+)
+from src.utils.misc_utils import calculate_distance, calculate_majority_tag
 from src.utils.pagination import Page, PaginationInput, paginate_list
 
 router = APIRouter()
@@ -65,6 +76,7 @@ class MealDetailedResponse(MealResponse):
 async def create_meal(
     name: Annotated[str, Form(min_length=1)],
     place_id: Annotated[uuid.UUID, Form()],
+    background_tasks: BackgroundTasks,
     price: Annotated[Optional[float], Form(ge=0)] = None,
     test_id: Annotated[Optional[str], Form()] = None,
     current_user: User = Depends(get_current_user),
@@ -96,12 +108,17 @@ async def create_meal(
     db.add(new_meal)
     await db.commit()
     await db.refresh(new_meal)
+
+    # Trigger background update of meal features
+    background_tasks.add_task(update_meal_features_background, new_meal.id)
+
     return ObjectCreationResponse(id=new_meal.id)
 
 
 @router.put("/meals/{meal_id}", response_model=MessageResponse)
 async def update_meal(
     meal_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     name: Annotated[Optional[str], Form(min_length=1)] = None,
     price: Annotated[Optional[float], Form(ge=0)] = None,
     test_id: Annotated[Optional[str], Form()] = None,
@@ -121,6 +138,10 @@ async def update_meal(
 
     db.add(meal)
     await db.commit()
+
+    # Trigger background update of meal features
+    background_tasks.add_task(update_meal_features_background, meal_id)
+
     return MessageResponse(message="Meal updated successfully")
 
 
@@ -135,24 +156,6 @@ async def delete_meal(
         raise HTTPException(status_code=404, detail="Meal not found")
 
     return MessageResponse(message="Delete request submitted")
-
-
-def calculate_majority_tag(reviews: List[MealReview], attr_name: str) -> str:
-    values = [
-        getattr(r, attr_name).value
-        for r in reviews
-        if getattr(r, attr_name) != TriState.unspecified
-    ]
-    if not values:
-        return "unspecified"
-    counts = Counter(values)
-    yes_count = counts.get("yes", 0)
-    no_count = counts.get("no", 0)
-    if yes_count > no_count:
-        return "yes"
-    elif no_count > yes_count:
-        return "no"
-    return "unspecified"
 
 
 @router.get("/meals", response_model=Page[MealResponse])
@@ -184,7 +187,9 @@ async def get_meals(
         query = query.where(Meal.name.ilike(f"%{name}%"))
 
     if cuisine:
-        query = query.join(Meal.place).where(Place.cuisine.ilike(f"%{cuisine}%"))
+        query = query.join(Meal.place).where(
+            cast(Place.cuisine, String).ilike(f"%{cuisine}%")
+        )
 
     result = await db.execute(query)
     meals = result.scalars().all()

@@ -19,7 +19,7 @@ from fastapi.concurrency import run_in_threadpool
 from loguru import logger
 from PIL import Image
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -32,6 +32,7 @@ from src.api.dependencies import get_current_user
 from src.db.models import Meal, MealReview, MealReviewImage, Place, TriState, User
 from src.db.session import get_async_db_session
 from src.services import image_processing, storage
+from src.services.recommendation import RecommendationService
 from src.utils.misc_utils import calculate_distance
 from src.utils.pagination import Page, PaginationInput, paginate_list
 
@@ -122,6 +123,7 @@ async def create_review(
     is_nut_free: Annotated[TriStateInput, Form()] = TriStateInput.unspecified,
     images: Optional[List[UploadFile]] = None,
     current_user: User = Depends(get_current_user),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: AsyncSession = Depends(get_async_db_session),
 ) -> ObjectCreationResponse:
     """Create a new meal review with optional images (max 5).
@@ -235,6 +237,16 @@ async def create_review(
 
     await db.commit()
     await db.refresh(new_review)
+
+    # Update Recommendation Engine
+    service = RecommendationService(db)
+    background_tasks.add_task(service.update_meal_features, meal.id)
+
+    # Signal: 2.5 if rating > 2 else -2.5
+    signal = 2.5 if rating > 2 else -2.5
+    background_tasks.add_task(
+        service.update_user_preferences, current_user.id, signal, meal.id
+    )
 
     return ObjectCreationResponse(id=new_review.id)
 
@@ -414,6 +426,15 @@ async def update_review(
     db.add(review)
     await db.commit()
 
+    # Update meal features and user preferences in the recommendation engine
+    service = RecommendationService(db)
+    background_tasks.add_task(service.update_meal_features, review.meal_id)
+    if rating is not None:
+        signal = 2.5 if rating > 2 else -2.5
+        background_tasks.add_task(
+            service.update_user_preferences, current_user.id, signal, review.meal_id
+        )
+
     # Schedule S3 cleanup for deleted images
     for img_path in images_to_delete:
         background_tasks.add_task(storage.delete_image, img_path)
@@ -489,9 +510,7 @@ async def get_reviews(
     # Build query
     query = select(MealReview).options(
         selectinload(MealReview.images),
-        selectinload(MealReview.meal)
-        .selectinload(Meal.place)
-        .selectinload(Place.images),
+        selectinload(MealReview.meal).selectinload(Place.images),
         selectinload(MealReview.user),
     )
 
@@ -525,7 +544,7 @@ async def get_reviews(
         query = (
             query.join(MealReview.meal)
             .join(Meal.place)
-            .where(Place.cuisine.ilike(f"%{cuisine}%"))
+            .where(cast(Place.cuisine, String).ilike(f"%{cuisine}%"))
         )
     if text:
         query = query.where(MealReview.text.ilike(f"%{text}%"))
@@ -683,9 +702,7 @@ async def get_review(
         .where(MealReview.id == review_id)
         .options(
             selectinload(MealReview.images),
-            selectinload(MealReview.meal)
-            .selectinload(Meal.place)
-            .selectinload(Place.images),
+            selectinload(MealReview.meal).selectinload(Place.images),
             selectinload(MealReview.user),
         )
     )
@@ -783,10 +800,15 @@ async def delete_review(
 
     # Collect image paths for deletion
     image_paths = [img.image_path for img in review.images]
+    meal_id = review.meal_id
 
     # Delete review (CASCADE will handle images)
     await db.delete(review)
     await db.commit()
+
+    # Update meal features
+    service = RecommendationService(db)
+    background_tasks.add_task(service.update_meal_features, meal_id)
 
     # Schedule S3 cleanup
     for img_path in image_paths:

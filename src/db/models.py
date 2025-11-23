@@ -20,6 +20,7 @@ from sqlalchemy import (
 from sqlalchemy import (
     Enum as SQLEnum,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -71,6 +72,41 @@ class MealReviewImage(Base):
 # --- Core Application Models ---
 
 
+class CuisineType(str, Enum):
+    # European
+    italian = "italian"
+    french = "french"
+    spanish = "spanish"
+    greek = "greek"
+    british = "british"
+    # Asian
+    chinese = "chinese"
+    japanese = "japanese"
+    korean = "korean"
+    thai = "thai"
+    vietnamese = "vietnamese"
+    indian = "indian"
+    filipino = "filipino"
+    # American
+    american = "american"
+    mexican = "mexican"
+    # Middle Eastern & African
+    mediterranean = "mediterranean"
+    african = "african"
+    # Other
+    fusion = "fusion"
+    cafe = "cafe"
+    bakery = "bakery"
+    barbecue = "barbecue"
+    seafood = "seafood"
+    vegetarian_vegan = "vegetarian_vegan"
+    other = "other"
+    unspecified = "unspecified"
+
+
+CuisineTypeEnum = SQLEnum(CuisineType, name="cuisine_type_enum")
+
+
 class User(Base):
     __tablename__ = "app_user"
     id: Mapped[uuid.UUID] = mapped_column(
@@ -107,8 +143,8 @@ class User(Base):
     swipes: Mapped[List["Swipe"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
-    feed_items: Mapped[List["UserFeedItem"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
+    computed_preferences: Mapped["ComputedUserPreferences"] = relationship(
+        back_populates="user", cascade="all, delete-orphan", uselist=False
     )
 
 
@@ -126,7 +162,9 @@ class Place(Base):
     lng: Mapped[float] = mapped_column(Float, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     address: Mapped[str] = mapped_column(String, nullable=False)
-    cuisine: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    cuisine: Mapped[CuisineType] = mapped_column(
+        CuisineTypeEnum, nullable=False, server_default=CuisineType.unspecified.value
+    )
 
     test_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
@@ -163,6 +201,12 @@ class Meal(Base):
     place: Mapped["Place"] = relationship(back_populates="meals")
     meal_reviews: Mapped[List["MealReview"]] = relationship(
         back_populates="meal", cascade="all, delete-orphan"
+    )
+    swipes: Mapped[List["Swipe"]] = relationship(
+        back_populates="meal", cascade="all, delete-orphan"
+    )
+    computed_features: Mapped["ComputedMealFeatures"] = relationship(
+        back_populates="meal", cascade="all, delete-orphan", uselist=False
     )
 
 
@@ -228,9 +272,6 @@ class MealReview(Base):
     images: Mapped[List[MealReviewImage]] = relationship(
         back_populates="meal_review", cascade="all, delete-orphan"
     )
-    swipes: Mapped[List["Swipe"]] = relationship(
-        back_populates="meal_review", cascade="all, delete-orphan"
-    )
 
     __table_args__ = (
         CheckConstraint("rating >= 1 AND rating <= 5", name="check_rating_range"),
@@ -253,10 +294,12 @@ class Swipe(Base):
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        sa.UUID(as_uuid=True), ForeignKey("app_user.id"), nullable=False
+        sa.UUID(as_uuid=True),
+        ForeignKey("app_user.id", ondelete="CASCADE"),
+        nullable=False,
     )
-    meal_review_id: Mapped[uuid.UUID] = mapped_column(
-        sa.UUID(as_uuid=True), ForeignKey("meal_review.id"), nullable=False
+    meal_id: Mapped[uuid.UUID] = mapped_column(
+        sa.UUID(as_uuid=True), ForeignKey("meal.id", ondelete="CASCADE"), nullable=False
     )
     session_id: Mapped[uuid.UUID] = mapped_column(
         sa.UUID(as_uuid=True), nullable=False, index=True
@@ -267,41 +310,52 @@ class Swipe(Base):
 
     # --- Relationships ---
     user: Mapped["User"] = relationship(back_populates="swipes")
-    meal_review: Mapped["MealReview"] = relationship(back_populates="swipes")
+    meal: Mapped["Meal"] = relationship(back_populates="swipes")
 
     __table_args__ = (
         UniqueConstraint(
             "user_id",
-            "meal_review_id",
+            "meal_id",
             "session_id",
             name="unique_user_meal_session_swipe",
         ),
     )
 
 
-class UserFeedItem(Base):
-    __tablename__ = "user_feed_item"
-    id: Mapped[uuid.UUID] = mapped_column(
-        sa.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+class ComputedMealFeatures(Base):
+    __tablename__ = "computed_meal_features"
+    meal_id: Mapped[uuid.UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        ForeignKey("meal.id", ondelete="CASCADE"),
+        primary_key=True,
     )
-    created_at: Mapped[datetime] = mapped_column(sa.DateTime, server_default=func.now())
+    tag_vector: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    cuisine_vector: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default="{}"
+    )
+    avg_price: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    avg_wait_time: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    review_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
+    meal: Mapped["Meal"] = relationship(back_populates="computed_features")
+
+
+class ComputedUserPreferences(Base):
+    __tablename__ = "computed_user_preferences"
     user_id: Mapped[uuid.UUID] = mapped_column(
         sa.UUID(as_uuid=True),
         ForeignKey("app_user.id", ondelete="CASCADE"),
-        nullable=False,
+        primary_key=True,
     )
-    meal_review_id: Mapped[uuid.UUID] = mapped_column(
-        sa.UUID(as_uuid=True),
-        ForeignKey("meal_review.id", ondelete="CASCADE"),
-        nullable=False,
+    tag_prefs: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    cuisine_prefs: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default="{}"
     )
-    score: Mapped[float] = mapped_column(Float, nullable=False)
+    price_bin_prefs: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default="{}"
+    )
+    wait_bin_prefs: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default="{}"
+    )
 
-    # Relationships
-    user: Mapped["User"] = relationship(back_populates="feed_items")
-    meal_review: Mapped["MealReview"] = relationship()
-
-    __table_args__ = (
-        UniqueConstraint("user_id", "meal_review_id", name="unique_user_feed_item"),
-    )
+    user: Mapped["User"] = relationship(back_populates="computed_preferences")
