@@ -157,3 +157,11 @@ def get_object_from_test_id(test_id: str, object_list: list) -> dict:
         if obj.get("test_id") == test_id:
             return obj
     raise ValueError(f"Object with test_id {test_id} not found")
+
+def print_response_code_summary(responses: list):
+    response_code_summary: Dict[int, int] = {}
+    for response in responses:
+        response_code_summary[response.status_code] = response_code_summary.get(response.status_code, 0) + 1
+    print("\nSUMMARY:")
+    for code, count in response_code_summary.items():
+        print(f"  {code}: {count}")

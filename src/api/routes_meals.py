@@ -9,8 +9,10 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    UploadFile,
     status,
 )
+from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy import String, cast, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,9 +24,9 @@ from src.api.common_schemas import (
     ObjectCreationResponse,
 )
 from src.api.dependencies import get_current_user
-from src.db.models import Meal, MealReview, Place, User
+from src.db.models import Meal, MealImage, MealReview, Place, User
 from src.db.session import get_async_db_session
-from src.services import storage
+from src.services import image_processing, storage
 from src.services.recommendation import (
     RecommendationService,
     update_meal_features_background,
@@ -79,6 +81,7 @@ async def create_meal(
     background_tasks: BackgroundTasks,
     price: Annotated[Optional[float], Form(ge=0)] = None,
     test_id: Annotated[Optional[str], Form()] = None,
+    images: Optional[List[UploadFile]] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db_session),
 ) -> ObjectCreationResponse:
@@ -89,6 +92,15 @@ async def create_meal(
     created implicitly when a user submits a review for a meal that does not yet exist,
     by providing the meal name and place id in the review submission.
     """
+    if images is None:
+        images = []
+
+    # Validate images count
+    if len(images) > 5:
+        raise HTTPException(
+            status_code=400,
+            detail="You can upload a maximum of 5 images.",
+        )
 
     # Check if place exists
     place = await db.get(Place, place_id)
@@ -106,6 +118,35 @@ async def create_meal(
 
     new_meal = Meal(name=name, place_id=place_id, price=price, test_id=test_id)
     db.add(new_meal)
+    await db.flush()
+
+    # Upload images
+    for idx, img in enumerate(images):
+        try:
+            contents = await img.read()
+            processed_bytes, metadata = image_processing.process_image_to_jpeg_flexible(
+                contents, max_size=1024, max_aspect_ratio=1.5
+            )
+
+            object_name = storage.generate_image_object_name(
+                storage.ObjectDescriptor.IMAGE_MEAL
+            )
+
+            storage.upload_image_from_bytes(processed_bytes, object_name)
+
+            meal_image = MealImage(
+                meal_id=new_meal.id,
+                image_path=object_name,
+                sequence_index=idx,
+            )
+            db.add(meal_image)
+        except Exception as e:
+            # In a real app, we might want to handle this better (e.g. rollback or partial success)
+            # For now, we'll skip the failed image
+            logger.error(
+                f"Failed to process/upload image for new meal {new_meal.id}. {e}"
+            )
+
     await db.commit()
     await db.refresh(new_meal)
 
@@ -122,10 +163,20 @@ async def update_meal(
     name: Annotated[Optional[str], Form(min_length=1)] = None,
     price: Annotated[Optional[float], Form(ge=0)] = None,
     test_id: Annotated[Optional[str], Form()] = None,
+    add_images: Optional[List[UploadFile]] = None,
+    remove_image_ids: Annotated[
+        Optional[str], Form(description="Comma-separated list of image IDs to remove")
+    ] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db_session),
 ) -> MessageResponse:
-    meal = await db.get(Meal, meal_id)
+    if add_images is None:
+        add_images = []
+
+    query = select(Meal).where(Meal.id == meal_id).options(selectinload(Meal.images))
+    result = await db.execute(query)
+    meal = result.scalars().first()
+
     if not meal:
         raise HTTPException(status_code=404, detail="Meal not found")
 
@@ -136,11 +187,75 @@ async def update_meal(
     if test_id is not None:
         meal.test_id = test_id
 
+    # Handle image removals
+    images_to_delete = []
+    if remove_image_ids:
+        ids_to_remove = []
+        for id_str in remove_image_ids.split(","):
+            try:
+                ids_to_remove.append(uuid.UUID(id_str.strip()))
+            except ValueError:
+                logger.warning(f"Invalid image ID format in update_meal: {id_str}")
+
+        # Find images to remove
+        to_remove = [img for img in meal.images if img.id in ids_to_remove]
+
+        for img in to_remove:
+            images_to_delete.append(img.image_path)
+            meal.images.remove(img)
+            # We don't strictly need db.delete(img) if we remove from relationship and cascade is set,
+            # but explicit delete is safer if cascade isn't perfect.
+            # With cascade="all, delete-orphan", removing from list is enough.
+
+    # Handle image additions
+    current_image_count = len(meal.images)
+    if add_images:
+        if current_image_count + len(add_images) > 5:
+            raise HTTPException(
+                status_code=400,
+                detail=f"You can only have up to 5 images. You currently have \
+                    {current_image_count} and are trying to add {len(add_images)}.",
+            )
+
+        # Determine starting sequence index
+        next_idx = 0
+        if meal.images:
+            next_idx = max(img.sequence_index for img in meal.images) + 1
+
+        for idx, img in enumerate(add_images):
+            try:
+                contents = await img.read()
+                processed_bytes, metadata = (
+                    image_processing.process_image_to_jpeg_flexible(
+                        contents, max_size=1024, max_aspect_ratio=1.5
+                    )
+                )
+
+                object_name = storage.generate_image_object_name(
+                    storage.ObjectDescriptor.IMAGE_MEAL
+                )
+
+                storage.upload_image_from_bytes(processed_bytes, object_name)
+
+                meal_image = MealImage(
+                    meal_id=meal.id,
+                    image_path=object_name,
+                    sequence_index=next_idx + idx,
+                )
+                meal.images.append(meal_image)
+            except Exception:
+                pass
+
     db.add(meal)
     await db.commit()
 
     # Trigger background update of meal features
     background_tasks.add_task(update_meal_features_background, meal_id)
+
+    # Schedule S3 cleanup for deleted images
+    for img_path in images_to_delete:
+        background_tasks.add_task(storage.delete_image, img_path)
+        logger.info(f"Scheduled deletion of image from S3: {img_path}")
 
     return MessageResponse(message="Meal updated successfully")
 
@@ -179,6 +294,7 @@ async def get_meals(
     query = select(Meal).options(
         selectinload(Meal.place),
         selectinload(Meal.meal_reviews).selectinload(MealReview.images),
+        selectinload(Meal.images),
     )
 
     if place_id:
@@ -232,16 +348,39 @@ async def get_meals(
             is_new = (now - created_at) < timedelta(days=14)
 
         first_image = None
-        sorted_reviews = sorted(reviews, key=lambda r: r.created_at, reverse=True)
-        for r in sorted_reviews:
-            if r.images:
-                sorted_imgs = sorted(r.images, key=lambda i: i.sequence_index)
-                first_image = BackendImageResponse(
-                    id=sorted_imgs[0].id,
-                    image_url=storage.generate_presigned_url(sorted_imgs[0].image_path),
-                    sequence_index=sorted_imgs[0].sequence_index,
-                )
-                break
+
+        # Check meal images first
+        if meal.images:
+            sorted_meal_images = sorted(meal.images, key=lambda x: x.sequence_index)
+            if sorted_meal_images:
+                first_img_obj = sorted_meal_images[0]
+                url = storage.generate_presigned_url_or_none(first_img_obj.image_path)
+                if url:
+                    first_image = BackendImageResponse(
+                        id=first_img_obj.id,
+                        image_url=url,
+                        sequence_index=first_img_obj.sequence_index,
+                    )
+
+        # If no meal image, check reviews
+        if not first_image:
+            sorted_reviews = sorted(reviews, key=lambda r: r.created_at, reverse=True)
+            for r in sorted_reviews:
+                if r.images:
+                    # Sort images by sequence index if available, or just take first
+                    # Assuming r.images is a list of MealReviewImage objects
+                    # They have sequence_index
+                    sorted_imgs = sorted(r.images, key=lambda x: x.sequence_index)
+                    if sorted_imgs:
+                        img_obj = sorted_imgs[0]
+                        url = storage.generate_presigned_url_or_none(img_obj.image_path)
+                        if url:
+                            first_image = BackendImageResponse(
+                                id=img_obj.id,
+                                image_url=url,
+                                sequence_index=img_obj.sequence_index,
+                            )
+                            break
 
         distance = None
         if lat is not None and lng is not None:
@@ -356,6 +495,7 @@ async def get_meal_details(
         .options(
             selectinload(Meal.place),
             selectinload(Meal.meal_reviews).selectinload(MealReview.images),
+            selectinload(Meal.images),
         )
     )
     result = await db.execute(query)
@@ -390,19 +530,35 @@ async def get_meal_details(
     is_nut_free = calculate_majority_tag(reviews, "is_nut_free")
 
     all_images = []
-    sorted_reviews = sorted(reviews, key=lambda r: r.created_at, reverse=True)
-    for r in sorted_reviews:
-        if r.images:
-            sorted_imgs = sorted(r.images, key=lambda i: i.sequence_index)
-            for img in sorted_imgs:
+
+    # Add meal images first
+    if meal.images:
+        for img in sorted(meal.images, key=lambda x: x.sequence_index):
+            url = storage.generate_presigned_url_or_none(img.image_path)
+            if url:
                 all_images.append(
                     BackendImageResponse(
                         id=img.id,
-                        image_url=storage.generate_presigned_url(img.image_path),
+                        image_url=url,
                         sequence_index=img.sequence_index,
                     )
                 )
-                if len(all_images) >= 10:
+
+    sorted_reviews = sorted(reviews, key=lambda r: r.created_at, reverse=True)
+    for r in sorted_reviews:
+        if r.images:
+            sorted_imgs = sorted(r.images, key=lambda x: x.sequence_index)
+            for img in sorted_imgs:
+                url = storage.generate_presigned_url_or_none(img.image_path)
+                if url:
+                    all_images.append(
+                        BackendImageResponse(
+                            id=img.id,
+                            image_url=url,
+                            sequence_index=img.sequence_index,
+                        )
+                    )
+                if len(all_images) >= 20:
                     break
         if len(all_images) >= 10:
             break

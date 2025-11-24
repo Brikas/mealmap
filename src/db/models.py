@@ -53,6 +53,22 @@ class PlaceImage(Base):
     sequence_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
+class MealImage(Base):
+    __tablename__ = "meal_image"
+    id: Mapped[uuid.UUID] = mapped_column(
+        sa.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    meal_id: Mapped[uuid.UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        ForeignKey("meal.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    image_path: Mapped[str] = mapped_column(String, nullable=False)
+    # A meal can have multiple images
+    meal: Mapped["Meal"] = relationship(back_populates="images")
+    sequence_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
 class MealReviewImage(Base):
     __tablename__ = "meal_review_image"
     id: Mapped[uuid.UUID] = mapped_column(
@@ -79,6 +95,7 @@ class CuisineType(str, Enum):
     spanish = "spanish"
     greek = "greek"
     british = "british"
+
     # Asian
     chinese = "chinese"
     japanese = "japanese"
@@ -87,12 +104,15 @@ class CuisineType(str, Enum):
     vietnamese = "vietnamese"
     indian = "indian"
     filipino = "filipino"
+
     # American
     american = "american"
     mexican = "mexican"
+
     # Middle Eastern & African
     mediterranean = "mediterranean"
     african = "african"
+
     # Other
     fusion = "fusion"
     cafe = "cafe"
@@ -199,6 +219,9 @@ class Meal(Base):
 
     # --- Relationships ---
     place: Mapped["Place"] = relationship(back_populates="meals")
+    images: Mapped[List[MealImage]] = relationship(
+        back_populates="meal", cascade="all, delete-orphan"
+    )
     meal_reviews: Mapped[List["MealReview"]] = relationship(
         back_populates="meal", cascade="all, delete-orphan"
     )

@@ -4,6 +4,9 @@ def get_meals():
             "test_id": "avocado-sandwich",
             "place_test_id": "kaist-duck-pond-cafe",
             "name": "Avocado Sandwich",
+            "images": [
+                "img_local/meals/brie-and-avocado-sandwich.jpg"
+            ]
         },
         {
             "test_id": "spicy-chicken-burger",
