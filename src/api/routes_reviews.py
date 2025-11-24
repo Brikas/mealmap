@@ -510,7 +510,9 @@ async def get_reviews(
     # Build query
     query = select(MealReview).options(
         selectinload(MealReview.images),
-        selectinload(MealReview.meal).selectinload(Place.images),
+        selectinload(MealReview.meal)
+        .selectinload(Meal.place)
+        .selectinload(Place.images),
         selectinload(MealReview.user),
     )
 
