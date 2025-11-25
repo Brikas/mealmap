@@ -156,6 +156,8 @@ class User(Base):
         Integer, nullable=False, server_default="1"
     )
 
+    score: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+
     # --- Relationships ---
     meal_reviews: Mapped[List["MealReview"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

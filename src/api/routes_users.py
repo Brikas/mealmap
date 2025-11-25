@@ -57,6 +57,7 @@ class UserResponse(BaseModel):
     last_name: Optional[str] = None
     image_url: Optional[str] = None
     test_id: Optional[str] = None
+    score: int = 0
 
 
 class UserUpdate(BaseModel):
@@ -86,6 +87,7 @@ async def read_users_me(
         last_name=current_user.last_name,
         image_url=storage.generate_presigned_url_or_none(current_user.image_path),
         test_id=getattr(current_user, "test_id", None),
+        score=current_user.score,
     )
 
 
@@ -121,6 +123,7 @@ async def search_users(
             last_name=user.last_name,
             image_url=storage.generate_presigned_url_or_none(user.image_path),
             test_id=getattr(user, "test_id", None),
+            score=user.score,
         )
         for user in page_obj.results
     ]
@@ -157,6 +160,7 @@ async def get_user(
         last_name=user.last_name,
         image_url=storage.generate_presigned_url_or_none(user.image_path),
         test_id=getattr(user, "test_id", None),
+        score=user.score,
     )
 
 
@@ -309,6 +313,7 @@ async def update_user(
         last_name=user.last_name,
         image_url=presigned_image_url,
         test_id=user.test_id,
+        score=user.score,
     )  # Return the updated user object
 
 

@@ -36,6 +36,14 @@ from src.services.recommendation import RecommendationService
 from src.utils.misc_utils import calculate_distance
 from src.utils.pagination import Page, PaginationInput, paginate_list
 
+# Constants for gamification
+SCORE_BASE = 10
+SCORE_TEXT = 20
+SCORE_TEXT_LONG = 20
+SCORE_TAG = 20
+SCORE_IMAGE = 50
+SCORE_WAIT_TIME = 10
+
 router = APIRouter()
 
 
@@ -48,6 +56,10 @@ class TriStateInput(str, Enum):
     yes = "yes"
     no = "no"
     unspecified = "unspecified"
+
+
+class ReviewCreationResponse(ObjectCreationResponse):
+    reward: int
 
 
 class PlaceBasicInfo(BaseModel):
@@ -104,7 +116,7 @@ class ReviewDetailedResponse(ReviewResponse):
 # --- Endpoints ---
 
 
-@router.post("/reviews", response_model=ObjectCreationResponse)
+@router.post("/reviews", response_model=ReviewCreationResponse)
 async def create_review(
     rating: Annotated[int, Form(ge=1, le=5)],
     place_id: Annotated[Optional[uuid.UUID], Form()] = None,
@@ -248,7 +260,42 @@ async def create_review(
         service.update_user_preferences, current_user.id, signal, meal.id
     )
 
-    return ObjectCreationResponse(id=new_review.id)
+    # Gamification
+    reward = SCORE_BASE
+    if text:
+        reward += SCORE_TEXT
+        if len(text) > 50:
+            reward += SCORE_TEXT_LONG
+
+    has_tag = any(
+        tag.value in ("yes", "no")
+        for tag in [
+            is_vegan,
+            is_halal,
+            is_vegetarian,
+            is_spicy,
+            is_gluten_free,
+            is_dairy_free,
+            is_nut_free,
+        ]
+    )
+    if has_tag:
+        reward += SCORE_TAG
+
+    if images:
+        reward += SCORE_IMAGE
+
+    if waiting_time_minutes is not None:
+        reward += SCORE_WAIT_TIME
+
+    # Update user score
+    user = await db.get(User, current_user.id)
+    if user:
+        user.score += reward
+        db.add(user)
+        await db.commit()
+
+    return ReviewCreationResponse(id=new_review.id, reward=reward)
 
 
 @router.put("/reviews/{review_id}", response_model=MessageResponse)
