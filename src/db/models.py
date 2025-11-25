@@ -183,9 +183,9 @@ class Place(Base):
     lat: Mapped[float] = mapped_column(Float, nullable=False)
     lng: Mapped[float] = mapped_column(Float, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    address: Mapped[str] = mapped_column(String, nullable=False)
+    address: Mapped[str] = mapped_column(String, nullable=True)
     cuisine: Mapped[CuisineType] = mapped_column(
-        CuisineTypeEnum, nullable=False, server_default=CuisineType.unspecified.value
+        CuisineTypeEnum, nullable=True, server_default=CuisineType.unspecified.value
     )
 
     test_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
