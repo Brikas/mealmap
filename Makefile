@@ -13,6 +13,10 @@ db-restore: ## Restore the database from a dump
 db-restore-local: ## Restore the database from a dump locally
 	docker exec postgres pg_restore -U postgres -d postgres -c /var/lib/postgresql/data/db_backup.pg_dump
 
+.PHONY: db-reset
+db-reset: ## Reset the database (drop public schema and run migrations)
+	@python3 scripts/db_manage.py reset
+
 .PHONY: migrate-test
 migrate-test: ## Dump the database, apply migrations, and optionally restore
 	@python3 scripts/db_manage.py migrate-test

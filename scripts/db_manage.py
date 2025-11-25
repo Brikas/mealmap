@@ -59,6 +59,22 @@ def db_restore():
     run_command(cmd_restore)
     print("Database restored.")
 
+def db_reset():
+    print("Resetting database...")
+    # Drop and recreate public schema inside container
+    cmd_reset = [
+        "docker", "exec", CONTAINER_NAME,
+        "psql", "-U", DB_USER, "-d", DB_NAME, "-c", "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+    ]
+    run_command(cmd_reset)
+    print("Database cleared.")
+
+    print("Running alembic upgrade head...")
+    # Assuming poetry is in path. On Windows, 'poetry' might be a batch file, so shell=True helps.
+    run_command("poetry run alembic upgrade head", shell=True)
+
+    print("Database reset complete.")
+
 def migrate_test():
     db_dump()
 
@@ -81,7 +97,7 @@ def migrate_test():
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python scripts/db_manage.py [dump|restore|migrate-test]")
+        print("Usage: python scripts/db_manage.py [dump|restore|migrate-test|reset]")
         sys.exit(1)
 
     action = sys.argv[1]
@@ -92,6 +108,8 @@ def main():
         db_restore()
     elif action == "migrate-test":
         migrate_test()
+    elif action == "reset":
+        db_reset()
     else:
         print(f"Unknown action: {action}")
         sys.exit(1)
