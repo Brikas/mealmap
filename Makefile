@@ -2,15 +2,15 @@ all: help
 
 ##	By Airidas
 .PHONY: db-dump
-db-dump:  ## Backup the database to a specific directory
+db-dump:  ## Backup the database to gitignore/db-dumps
 	@python3 scripts/db_manage.py dump
 
 .PHONY: db-restore
-db-restore: ## Restore the database from a dump
+db-restore: ## Restore the database from gitignore/db-dumps
 	@python3 scripts/db_manage.py restore
 
 .PHONY: db-restore-local
-db-restore-local: ## Restore the database from a dump locally
+db-restore-local: ## Restore the database from a dump inside docker container
 	docker exec postgres pg_restore -U postgres -d postgres -c /var/lib/postgresql/data/db_backup.pg_dump
 
 .PHONY: db-reset
@@ -25,8 +25,20 @@ migrate-test: ## Dump the database, apply migrations, and optionally restore
 
 .PHONY: help
 help:  ## Show this help
+	@echo ""
+	@echo "\033[1mFeatured Commands:\033[0m"
+	@printf "  \033[36m%-30s\033[0m %s\n" "run" "Run the project"
+	@printf "  \033[36m%-30s\033[0m %s\n" "stop" "Stop all running containers"
+	@printf "  \033[36m%-30s\033[0m %s\n" "test-local" "Run tests locally"
+	@printf "  \033[36m%-30s\033[0m %s\n" "db-reset" "Reset the database"
+	@printf "  \033[36m%-30s\033[0m %s\n" "db-dump" "Backup the database to gitignore/db-dumps"
+	@printf "  \033[36m%-30s\033[0m %s\n" "db-restore" "Restore the database from gitignore/db-dumps"
+	@printf "  \033[36m%-30s\033[0m %s\n" "db-restore-local" "Restore the database from a dump inside docker container"
+	@printf "  \033[36m%-30s\033[0m %s\n" "migrate-test" "Dump the database, apply migrations, and optionally restore"
+	@echo ""
+	@echo "\033[1mAll Commands:\033[0m"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
-	| awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+	| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: replace-env
 replace-env:  ## Use to update existing .env with .env.example
@@ -64,7 +76,7 @@ full-reset:
 	@echo "Docker reset complete."
 
 
-full-stop:
+full-stop: ## Stop all running containers
 	docker stop $$(docker ps -a -q)
 
 kill: stop  ## Kill all running containers
@@ -88,12 +100,8 @@ run-detached: build   ## Run the project in detached mode
 
 reboot: kill run  ## Kill all running containers and run the project
 
-.PHONY: show-envs-info
-show-envs-info:  ## Show information about environment variables used by the application. Also you can specify format using FORMAT variable. Like: make show-envs-info FORMAT="markdown"
-	@python3 scripts/print_env_vars.py $(FORMAT)
-
 .PHONY: remove
-remove:
+remove: # Remove all containers and volumes
 	docker compose -f deploy/docker/docker-compose.yml --project-directory . rm -f
 	docker volume rm fast-python-db-data
 
