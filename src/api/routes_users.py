@@ -402,14 +402,14 @@ async def get_my_feed(
     Get personalized meal feed for the current user.
     """
     service = RecommendationService(db)
-    meals = await service.get_recommendations(
+    recommendations = await service.get_recommendations(
         current_user.id, limit=limit, lat=lat, lng=lng
     )
 
     results = []
     now = datetime.now(timezone.utc)
 
-    for meal in meals:
+    for meal, score in recommendations:
         reviews = meal.meal_reviews
         place = meal.place
 
@@ -492,6 +492,7 @@ async def get_my_feed(
                     is_dairy_free=is_dairy_free,
                     is_nut_free=is_nut_free,
                 ),
+                match_score=score,
                 test_id=meal.test_id,
             )
         )

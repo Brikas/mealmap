@@ -265,10 +265,10 @@ class RecommendationService:
         limit: int = 20,
         lat: Optional[float] = None,
         lng: Optional[float] = None,
-    ) -> Sequence[Meal]:
+    ) -> Sequence[Tuple[Meal, float]]:
         """
         Generates feed items for the user based on similarity scores on the fly.
-        Returns a list of Meal objects.
+        Returns a list of (Meal, score) tuples.
         """
         # Define image filter condition
         # Meal has images OR Meal has reviews with images
@@ -317,7 +317,7 @@ class RecommendationService:
             result = await self.db.execute(query)
             meals = result.scalars().all()
             logger.info(f"Returning fallback recent meals for user {user_id}")
-            return meals
+            return [(m, 0.0) for m in meals]
 
         # 2. Fetch Candidate Meals (ComputedMealFeatures)
         # Exclude already swiped meals
@@ -426,7 +426,7 @@ class RecommendationService:
             result = await self.db.execute(query)
             meals = result.scalars().all()
             logger.info("Returning fallback recent meals (no candidates)")
-            return meals
+            return [(m, 0.0) for m in meals]
 
         places_query = (
             select(Meal.id, Place.lat, Place.lng)
@@ -516,10 +516,10 @@ class RecommendationService:
         for meal_id in top_meal_ids:
             if meal_id in meal_map:
                 meal = meal_map[meal_id]
-                score = score_map.get(meal_id)
+                score = score_map.get(meal_id, 0.0)
                 # Log the reason/score
                 logger.debug(f"Recommended meal {meal.id} with score {score}")
-                recommendations.append(meal)
+                recommendations.append((meal, score))
 
         return recommendations
 

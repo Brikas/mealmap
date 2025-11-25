@@ -61,6 +61,7 @@ class MealResponse(BaseModel):
     distance_meters: Optional[float] = None
     is_new: bool
     is_popular: bool
+    match_score: Optional[float] = None
 
     tags: MealTags
 
