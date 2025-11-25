@@ -261,7 +261,7 @@ async def upload_profile_image(
     return ImageUploadResponse(image_url=presigned_image_url)
 
 
-@router.post("/users/{user_id}")
+@router.patch("/users/{user_id}")
 async def update_user(
     user_id: str,
     user_data: UserUpdate,
@@ -287,14 +287,6 @@ async def update_user(
         user.first_name = user_data.first_name
     if user_data.last_name is not None:
         user.last_name = user_data.last_name
-
-    # if user_data.image is not None:
-    #     object_name = storage.generate_image_object_name(
-    #         storage.ObjectDescriptor.IMAGE_USER_PROFILE,
-    #     )
-    #     user.image_path = storage.upload_image_from_base64(
-    #         base64_image=user_data.image, object_name=object_name
-    #     )
 
     db.add(user)  # Explicitly add the user object
     await db.commit()
@@ -399,7 +391,14 @@ async def get_my_feed(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> List[MealResponse]:
     """
-    Get personalized meal feed for the current user.
+    Get next batch of meals to swipe.
+
+    Must be used in conjuction with POST requests to /swipes, otherwise the same meals
+    will be returned. Posting a Swipe object to /swipes will prevent those meals from
+    showing up again in the same session id and will also improve future recommendations
+
+    Providing lat and lng will return distance calculations and enrich the recomendation
+    engine with distance-based matching.
     """
     service = RecommendationService(db)
     recommendations = await service.get_recommendations(

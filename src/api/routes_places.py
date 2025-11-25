@@ -363,7 +363,7 @@ async def delete_place(
     return MessageResponse(message="Place deleted successfully")
 
 
-@router.put("/places/{place_id}", response_model=MessageResponse)
+@router.patch("/places/{place_id}", response_model=MessageResponse)
 async def update_place(
     place_id: uuid.UUID,
     background_tasks: BackgroundTasks,

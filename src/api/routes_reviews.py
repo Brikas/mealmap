@@ -298,7 +298,7 @@ async def create_review(
     return ReviewCreationResponse(id=new_review.id, reward=reward)
 
 
-@router.put("/reviews/{review_id}", response_model=MessageResponse)
+@router.patch("/reviews/{review_id}", response_model=MessageResponse)
 async def update_review(
     review_id: uuid.UUID,
     meal_id: Annotated[Optional[uuid.UUID], Form()] = None,

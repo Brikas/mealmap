@@ -157,7 +157,7 @@ async def create_meal(
     return ObjectCreationResponse(id=new_meal.id)
 
 
-@router.put("/meals/{meal_id}", response_model=MessageResponse)
+@router.patch("/meals/{meal_id}", response_model=MessageResponse)
 async def update_meal(
     meal_id: uuid.UUID,
     background_tasks: BackgroundTasks,
