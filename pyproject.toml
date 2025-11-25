@@ -185,6 +185,7 @@ lint.ignore = [
     "RET504", # unneccessary assignment before return
     "D102",   # Missing docstring in public class
     "F401", # Imported but unused
+    "S311", # Standard pseudo-random generators are not suitable for cryptographic purposes
 
 ]
 

@@ -1,8 +1,10 @@
 import math
+import random
 import uuid
-from typing import Dict, List, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from sqlalchemy import and_, select
+from loguru import logger
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -11,24 +13,36 @@ from src.db.models import (
     ComputedUserPreferences,
     CuisineType,
     Meal,
+    MealImage,
     MealReview,
+    MealReviewImage,
     Place,
     Swipe,
     TriState,
 )
 from src.db.session import async_session_factory
+from src.utils.misc_utils import calculate_distance
 
-# Constants
+### Constants
+# Weights
 WEIGHT_TAGS = 0.50
 WEIGHT_CUISINE = 0.30
 WEIGHT_PRICE = 0.10
 WEIGHT_WAIT = 0.10
+WEIGHT_DISTANCE = 0.20
+
 LEARNING_RATE = 0.15
 ACCEL_MAX = 2.5
 ACCEL_DECAY = 0.2
 RECENCY_HALF_LIFE_DAYS = 90
 PRICE_BINS = [0, 5000, 10000, 15000, 20000, 30000, 50000]
 WAIT_BINS = [0, 10, 20, 30, 45, 60, 90]
+
+DISTANCE_DECAY_KM = 3.0
+MAX_RADIUS_KM = 25.0
+
+EPSILON_RANDOM = 0.1
+EPSILON_IGNORE_METRIC = 0.1
 
 
 class RecommendationService:
@@ -246,19 +260,54 @@ class RecommendationService:
         return vector
 
     async def get_recommendations(
-        self, user_id: uuid.UUID, limit: int = 20
+        self,
+        user_id: uuid.UUID,
+        limit: int = 20,
+        lat: Optional[float] = None,
+        lng: Optional[float] = None,
     ) -> Sequence[Meal]:
         """
         Generates feed items for the user based on similarity scores on the fly.
         Returns a list of Meal objects.
         """
+        # Define image filter condition
+        # Meal has images OR Meal has reviews with images
+        meal_has_image_filter = or_(
+            select(MealImage.id).where(MealImage.meal_id == Meal.id).exists(),
+            select(MealReviewImage.id)
+            .join(MealReview)
+            .where(
+                and_(
+                    MealReview.meal_id == Meal.id,
+                    MealReviewImage.meal_review_id == MealReview.id,
+                )
+            )
+            .exists(),
+        )
+
+        # Check total meal count for fallback logic
+        total_meals_query = select(func.count(Meal.id))
+        total_meals_res = await self.db.execute(total_meals_query)
+        total_meals = total_meals_res.scalar() or 0
+
         # 1. Fetch User Preferences
         user_prefs = await self.db.get(ComputedUserPreferences, user_id)
         if not user_prefs:
             # No prefs, return recent meals as fallback
+            # Apply image filter if total meals >= 200
+            query = select(Meal)
+            if total_meals >= 200:
+                query = query.where(meal_has_image_filter)
+
+            # Apply distance filter if location provided
+            if lat is not None and lng is not None:
+                # Simple bounding box or just fetch and filter in python?
+                # For now, let's fetch recent and filter in python if needed,
+                # but since this is fallback, maybe just return recent.
+                pass
+
             query = (
-                select(Meal)
-                .order_by(Meal.created_at.desc())
+                query.order_by(Meal.created_at.desc())
                 .limit(limit)
                 .options(
                     selectinload(Meal.place),
@@ -266,7 +315,9 @@ class RecommendationService:
                 )
             )
             result = await self.db.execute(query)
-            return result.scalars().all()
+            meals = result.scalars().all()
+            logger.info(f"Returning fallback recent meals for user {user_id}")
+            return meals
 
         # 2. Fetch Candidate Meals (ComputedMealFeatures)
         # Exclude already swiped meals
@@ -277,30 +328,167 @@ class RecommendationService:
             MealReview.user_id == user_id
         )
 
-        # Fetch candidates
-        # We fetch ComputedMealFeatures directly
+        # Filter for ComputedMealFeatures
+        computed_has_image_filter = or_(
+            select(MealImage.id)
+            .where(MealImage.meal_id == ComputedMealFeatures.meal_id)
+            .exists(),
+            select(MealReviewImage.id)
+            .join(MealReview)
+            .where(
+                and_(
+                    MealReview.meal_id == ComputedMealFeatures.meal_id,
+                    MealReviewImage.meal_review_id == MealReview.id,
+                )
+            )
+            .exists(),
+        )
+
+        # Build query
         query = (
             select(ComputedMealFeatures)
+            .join(ComputedMealFeatures.meal)
+            .join(Meal.place)
             .where(
                 and_(
                     ComputedMealFeatures.meal_id.notin_(swiped_meals_query),
                     ComputedMealFeatures.meal_id.notin_(reviewed_meals_query),
                 )
             )
-            .limit(500)
-        )  # Limit candidate pool for performance
+        )
+
+        # Apply image filter if total meals >= 200
+        if total_meals >= 200:
+            query = query.where(computed_has_image_filter)
+
+        # Apply distance filter (25km radius)
+        # We can't easily do great circle distance in pure SQL without PostGIS or complex math.
+        # We'll fetch candidates and filter in Python, or use a bounding box approximation.
+        # Given "only consider places in 25 km radius only", let's try bounding box first.
+        # 1 deg lat ~= 111 km. 1 deg lng ~= 111 * cos(lat) km.
+        # 25 km ~= 0.225 deg lat.
+        if lat is not None and lng is not None:
+            lat_delta = MAX_RADIUS_KM / 111.0
+            lng_delta = MAX_RADIUS_KM / (111.0 * math.cos(math.radians(lat)))
+            query = query.where(
+                and_(
+                    Place.lat.between(lat - lat_delta, lat + lat_delta),
+                    Place.lng.between(lng - lng_delta, lng + lng_delta),
+                )
+            )
 
         result = await self.db.execute(query)
         candidates = result.scalars().all()
 
+        # If no candidates found with distance filter, try relaxing it
+        if not candidates and lat is not None and lng is not None:
+            logger.info("No candidates found within radius, relaxing distance filter")
+            # Re-run query without distance filter
+            query = select(ComputedMealFeatures).where(
+                and_(
+                    ComputedMealFeatures.meal_id.notin_(swiped_meals_query),
+                    ComputedMealFeatures.meal_id.notin_(reviewed_meals_query),
+                )
+            )
+            if total_meals >= 200:
+                query = query.where(computed_has_image_filter)
+            result = await self.db.execute(query)
+            candidates = result.scalars().all()
+
+        # Epsilon Greedy: Decide if we ignore a metric
+        ignored_metric = None
+        if random.random() < EPSILON_IGNORE_METRIC:
+            metrics = ["tags", "cuisine", "price", "wait"]
+            ignored_metric = random.choice(metrics)
+            logger.info(f"Exploration: Ignoring metric {ignored_metric}")
+
+        # Fetch places for candidates to calculate distance
+        candidate_meal_ids = [c.meal_id for c in candidates]
+        if not candidate_meal_ids:
+            # Fallback
+            query = select(Meal)
+            if total_meals >= 200:
+                query = query.where(meal_has_image_filter)
+            query = (
+                query.where(
+                    and_(
+                        Meal.id.notin_(swiped_meals_query),
+                        Meal.id.notin_(reviewed_meals_query),
+                    )
+                )
+                .order_by(Meal.created_at.desc())
+                .limit(limit)
+                .options(
+                    selectinload(Meal.place),
+                    selectinload(Meal.meal_reviews).selectinload(MealReview.images),
+                )
+            )
+            result = await self.db.execute(query)
+            meals = result.scalars().all()
+            logger.info("Returning fallback recent meals (no candidates)")
+            return meals
+
+        places_query = (
+            select(Meal.id, Place.lat, Place.lng)
+            .join(Place)
+            .where(Meal.id.in_(candidate_meal_ids))
+        )
+        places_res = await self.db.execute(places_query)
+        places_map = {r[0]: (r[1], r[2]) for r in places_res.all()}
+
         scores = []
         for candidate in candidates:
-            score = self._calculate_similarity(user_prefs, candidate)
+            distance_km = None
+            if lat is not None and lng is not None:
+                p_lat, p_lng = places_map.get(candidate.meal_id, (None, None))
+                if p_lat is not None and p_lng is not None:
+                    distance_km = calculate_distance(lat, lng, p_lat, p_lng) / 1000.0
+
+            score = self._calculate_similarity(
+                user_prefs,
+                candidate,
+                distance_km=distance_km,
+                ignored_metric=ignored_metric,
+            )
             scores.append((candidate.meal_id, score))
 
         # Sort by score
         scores.sort(key=lambda x: x[1], reverse=True)
-        top_candidates = scores[:limit]
+
+        # Shuffling logic: take top limit + 20, shuffle, then take limit
+        if len(scores) > 100:
+            pool_size = limit + 20
+            top_pool = scores[:pool_size]
+            random.shuffle(top_pool)
+            top_candidates = top_pool[:limit]
+        else:
+            top_candidates = scores[:limit]
+
+        # Epsilon Greedy: Random Meal Injection
+        # 10% chance for each meal in the top list to be replaced by a random one
+        current_top_ids = {x[0] for x in top_candidates}
+
+        debug_random_meal_injections = 0
+        for i in range(len(top_candidates)):
+            if random.random() < EPSILON_RANDOM:
+                # Find candidates not currently in the top list
+                available_candidates = [
+                    c for c in candidates if c.meal_id not in current_top_ids
+                ]
+
+                if available_candidates:
+                    random_candidate = random.choice(available_candidates)
+
+                    # Replace the current recommendation with the random one
+                    top_candidates[i] = (random_candidate.meal_id, 0.0)
+
+                    # Add to current_top_ids to ensure uniqueness in this batch
+                    current_top_ids.add(random_candidate.meal_id)
+                    debug_random_meal_injections += 1
+        if debug_random_meal_injections > 0:
+            logger.info(
+                f"Exploration: Injected {debug_random_meal_injections} random meals"
+            )
 
         # Fetch Meal objects for the top candidates
         top_meal_ids = [x[0] for x in top_candidates]
@@ -321,9 +509,17 @@ class RecommendationService:
         # Sort meals based on the order in top_meal_ids
         meal_map = {m.id: m for m in meals}
         recommendations = []
+
+        # Create a map for scores
+        score_map = {x[0]: x[1] for x in top_candidates}
+
         for meal_id in top_meal_ids:
             if meal_id in meal_map:
-                recommendations.append(meal_map[meal_id])
+                meal = meal_map[meal_id]
+                score = score_map.get(meal_id)
+                # Log the reason/score
+                logger.debug(f"Recommended meal {meal.id} with score {score}")
+                recommendations.append(meal)
 
         return recommendations
 
@@ -331,6 +527,8 @@ class RecommendationService:
         self,
         user_prefs: ComputedUserPreferences,
         meal_features: ComputedMealFeatures,
+        distance_km: Optional[float] = None,
+        ignored_metric: Optional[str] = None,
     ) -> float:
         def cosine_sim(vec1: Dict, vec2: Dict) -> float:
             # vec1 is user prefs: {key: {val: float, count: int}}
@@ -358,24 +556,43 @@ class RecommendationService:
             return dot_product / (math.sqrt(norm1) * math.sqrt(norm2))
 
         # Tags
-        sim_tags = cosine_sim(user_prefs.tag_prefs, meal_features.tag_vector)
+        sim_tags = 0.0
+        if ignored_metric != "tags":
+            sim_tags = cosine_sim(user_prefs.tag_prefs, meal_features.tag_vector)
 
         # Cuisine
-        sim_cuisine = cosine_sim(user_prefs.cuisine_prefs, meal_features.cuisine_vector)
+        sim_cuisine = 0.0
+        if ignored_metric != "cuisine":
+            sim_cuisine = cosine_sim(
+                user_prefs.cuisine_prefs, meal_features.cuisine_vector
+            )
 
         # Price
-        price_vec = self._scalar_to_soft_bin(meal_features.avg_price, PRICE_BINS)
-        sim_price = cosine_sim(user_prefs.price_bin_prefs, price_vec)
+        sim_price = 0.0
+        if ignored_metric != "price":
+            price_vec = self._scalar_to_soft_bin(meal_features.avg_price, PRICE_BINS)
+            sim_price = cosine_sim(user_prefs.price_bin_prefs, price_vec)
 
         # Wait
-        wait_vec = self._scalar_to_soft_bin(meal_features.avg_wait_time, WAIT_BINS)
-        sim_wait = cosine_sim(user_prefs.wait_bin_prefs, wait_vec)
+        sim_wait = 0.0
+        if ignored_metric != "wait":
+            wait_vec = self._scalar_to_soft_bin(meal_features.avg_wait_time, WAIT_BINS)
+            sim_wait = cosine_sim(user_prefs.wait_bin_prefs, wait_vec)
+
+        # Distance
+        sim_dist = 0.0
+        if distance_km is not None:
+            # Decay function: exp(-lambda * d)
+            # Half-life at 3km -> exp(-lambda * 3) = 0.5 -> lambda = ln(2)/3 ~= 0.231
+            decay_rate = math.log(2) / DISTANCE_DECAY_KM
+            sim_dist = math.exp(-decay_rate * distance_km)
 
         final_score = (
             sim_tags * WEIGHT_TAGS
             + sim_cuisine * WEIGHT_CUISINE
             + sim_price * WEIGHT_PRICE
             + sim_wait * WEIGHT_WAIT
+            + sim_dist * WEIGHT_DISTANCE
         )
 
         return final_score

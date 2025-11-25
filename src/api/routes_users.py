@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Dict, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from fastapi import (
     APIRouter,
@@ -44,7 +44,7 @@ from src.db.models import MealReview, MealReviewImage, Place, User
 from src.db.session import get_async_db_session
 from src.services import image_processing, storage
 from src.services.recommendation import RecommendationService
-from src.utils.misc_utils import calculate_majority_tag
+from src.utils.misc_utils import calculate_distance, calculate_majority_tag
 from src.utils.pagination import Page, PaginationInput, paginate_query
 
 router = APIRouter()
@@ -389,13 +389,17 @@ async def change_password(
 async def get_my_feed(
     current_user: Annotated[User, Depends(get_current_user)],
     limit: int = Query(3, ge=1, le=50),
+    lat: Optional[float] = Query(None),
+    lng: Optional[float] = Query(None, alias="long"),
     db: AsyncSession = Depends(get_async_db_session),
 ) -> List[MealResponse]:
     """
     Get personalized meal feed for the current user.
     """
     service = RecommendationService(db)
-    meals = await service.get_recommendations(current_user.id, limit=limit)
+    meals = await service.get_recommendations(
+        current_user.id, limit=limit, lat=lat, lng=lng
+    )
 
     results = []
     now = datetime.now(timezone.utc)
@@ -448,6 +452,17 @@ async def get_my_feed(
                 )
                 break
 
+        distance_meters = None
+        if (
+            lat is not None
+            and lng is not None
+            and place.lat is not None
+            and place.lng is not None
+        ):
+            distance_meters = calculate_distance(
+                lat, lng, meal.place.lat, meal.place.lng
+            )
+
         results.append(
             MealResponse(
                 id=meal.id,
@@ -460,7 +475,7 @@ async def get_my_feed(
                 avg_waiting_time=avg_waiting_time,
                 avg_price=avg_price,
                 first_image=first_image,
-                distance_meters=None,
+                distance_meters=distance_meters,
                 is_new=is_new,
                 is_popular=False,
                 tags=MealTags(
