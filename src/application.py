@@ -55,6 +55,7 @@ origins = [
     "https://mealmap.christmas",
     "http://localhost:5173",
     "http://localhost:4173",
+    "https://kaist.gay",
 ]
 
 app.add_middleware(
