@@ -1,18 +1,31 @@
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional, Union
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Body,
+    Depends,
+    HTTPException,
+    Query,
+    status,
+)
 from fastapi.security import APIKeyHeader
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.auth import dao, jwt_utils
+from src.api.auth.dto import TokenCreationData
+from src.api.routes_users import UserResponse
 from src.conf.settings import settings
-from src.db.models import Meal
+from src.db.models import Meal, User
 from src.db.session import get_async_db_session
+from src.services import storage
 from src.services.recommendation import (
     RecommendationService,
     update_meal_features_background,
 )
+from src.utils.pagination import Page, PaginationInput, paginate_query
 
 router = APIRouter(prefix="/admin")
 
@@ -66,3 +79,43 @@ async def recompute_all_meal_features(
             "message": "Recompute scheduling failed",
             "details": str(e),
         }
+
+
+@router.post("/impersonate/{user_id}")
+async def impersonate_user(
+    user_id: str,
+    db: AsyncSession = Depends(get_async_db_session),
+    admin_key: str = Depends(get_admin_api_key),
+) -> Dict[str, Any]:
+    """
+    Generates an access token for the specified user.
+
+    Requires admin access key.
+    """
+    try:
+        user = await dao.get_user_by_id(db, user_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid user ID format",
+        ) from None
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    access_token = jwt_utils.create_access_token(
+        TokenCreationData(
+            sub=str(user.id),
+            email=user.email,
+            version=user.token_version,
+        )
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": str(user.id),
+    }

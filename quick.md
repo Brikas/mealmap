@@ -4,8 +4,9 @@ http://localhost:8000/docs
 
 postgres:5432/
 
-poetry run alembic revision --autogenerate -m "your migration message"
-poetry run alembic upgrade head
+(python run)
+alembic revision --autogenerate -m "your migration message"
+alembic upgrade head
 
 make db-dump
 make db-restore
