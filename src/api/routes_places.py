@@ -28,6 +28,7 @@ from src.api.common_schemas import (
     ObjectCreationResponse,
 )
 from src.api.dependencies import get_current_user
+from src.api.response_schemas import PlaceResponse, PlaceResponseDetailed
 from src.db.models import CuisineType, Meal, Place, PlaceImage, User
 from src.db.session import get_async_db_session
 from src.services import image_processing, storage
@@ -35,43 +36,10 @@ from src.services.recommendation import (
     RecommendationService,
     update_place_meals_features_background,
 )
-from src.utils.misc_utils import calculate_distance
+from src.services.response_builder import build_place_response
 from src.utils.pagination import Page, PaginationInput, paginate_list
 
 router = APIRouter()
-
-
-class PlaceResponse(BaseModel):
-    id: uuid.UUID
-    name: str
-    image_count: int
-    first_image: Optional[BackendImageResponse] = None
-    distance_meters: Optional[float] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    average_rating: Optional[float] = None
-    review_count: Optional[int] = None
-    cuisine: Optional[CuisineType] = Field(
-        None,
-        description=(
-            "Cuisine type of the place. Possible values: italian, french, spanish, "
-            "greek, british, chinese, japanese, korean, thai, vietnamese, indian, "
-            "filipino, american, mexican, mediterranean, african, fusion, cafe, "
-            "bakery, barbecue, seafood, vegetarian_vegan, other, unspecified"
-        ),
-    )
-    test_id: Optional[str] = None
-
-
-class PlaceResponseDetailed(PlaceResponse):
-    address: Optional[str] = None
-    created_at: str = Field(
-        ..., description="ISO formatted. YYYY-MM-DD HH:MM:SS.mmmmmm"
-    )
-    updated_at: str = Field(
-        ..., description="ISO formatted. YYYY-MM-DD HH:MM:SS.mmmmmm"
-    )
-    images: List[BackendImageResponse] = []
 
 
 @router.post("/places", response_model=ObjectCreationResponse)
@@ -192,76 +160,39 @@ async def list_places(
     all_places = result.scalars().all()
 
     # Calculate distances and filter by radius
-    places_with_distance = []
+    processed_places = []
     for place in all_places:
-        distance = calculate_distance(lat, lng, place.lat, place.lng)
-        if distance <= radius_meters:
-            # Calculate average rating and review count
-            reviews = [r for m in place.meals for r in m.meal_reviews]
-            avg_rating = (
-                sum(r.rating for r in reviews) / len(reviews) if reviews else None
-            )
-            review_count = len(reviews)
+        response = build_place_response(place, lat, lng)
 
-            places_with_distance.append(
-                {
-                    "place": place,
-                    "distance": distance,
-                    "avg_rating": avg_rating,
-                    "review_count": review_count,
-                }
-            )
+        if (
+            response.distance_meters is not None
+            and response.distance_meters <= radius_meters
+        ):
+            processed_places.append(response)
 
     # Sort
-    sort_key_map = {
-        "distance": "distance",
-        "average_rating": "avg_rating",
+    sort_attr_map = {
+        "distance": "distance_meters",
+        "average_rating": "average_rating",
         "review_count": "review_count",
     }
-    sort_key = sort_key_map[sort_by]
+    sort_attr = sort_attr_map[sort_by]
 
-    places_with_distance.sort(
-        key=lambda x: x[sort_key] if x[sort_key] is not None else float("inf"),
+    processed_places.sort(
+        key=lambda x: getattr(x, sort_attr)
+        if getattr(x, sort_attr) is not None
+        else float("inf"),
         reverse=(sort_order == "desc"),
     )
 
     # Paginate the sorted list first (without building full responses yet)
     page_data = await paginate_list(
-        items=places_with_distance,
+        items=processed_places,
         page=pagination.page,
         page_size=pagination.page_size,
     )
 
-    # Build response list only for paginated items
-    results = []
-    for item in page_data.results:
-        place = item["place"]
-        first_image = None
-        image_count = 0
-        if place.images:
-            image_count = len(place.images)
-            sorted_images = sorted(place.images, key=lambda i: i.sequence_index)
-            first_image = BackendImageResponse(
-                id=sorted_images[0].id,
-                image_url=storage.generate_presigned_url(sorted_images[0].image_path),
-                sequence_index=sorted_images[0].sequence_index,
-            )
-
-        results.append(
-            PlaceResponse(
-                id=place.id,
-                name=place.name,
-                image_count=image_count,
-                first_image=first_image,
-                distance_meters=item["distance"],
-                latitude=place.lat,
-                longitude=place.lng,
-                average_rating=item["avg_rating"],
-                review_count=item["review_count"],
-                cuisine=place.cuisine,
-                test_id=place.test_id,
-            )
-        )
+    results = page_data.results
 
     # Return page with built response objects
     return Page[PlaceResponse](
@@ -302,7 +233,16 @@ async def get_place_details(
     if not place:
         raise HTTPException(status_code=404, detail="Place not found")
 
-    # Build BackendImage objects
+    # Check lat/long consistency
+    if (lat is not None and lng is None) or (lat is None and lng is not None):
+        raise HTTPException(
+            status_code=400,
+            detail="Both lat and long must be provided for distance calculation.",
+        )
+
+    base_response = build_place_response(place, lat, lng)
+
+    # Build BackendImage objects (all of them)
     backend_images: List[BackendImageResponse] = []
     for img in sorted(place.images, key=lambda i: i.sequence_index):
         backend_images.append(
@@ -313,37 +253,12 @@ async def get_place_details(
             )
         )
 
-    # Calculate average rating and review count
-    reviews = [r for m in place.meals for r in m.meal_reviews]
-    avg_rating = sum(r.rating for r in reviews) / len(reviews) if reviews else None
-    review_count = len(reviews)
-
-    # Calculate distance if user coordinates provided
-    distance_meters = None
-    if lat is not None and lng is not None:
-        distance_meters = calculate_distance(lat, lng, place.lat, place.lng)
-    elif lat is not None or lng is not None:
-        raise HTTPException(
-            status_code=400,
-            detail="Both lat and long must be provided for distance calculation.",
-        )
-
     return PlaceResponseDetailed(
-        id=place.id,
-        name=place.name,
-        image_count=len(backend_images),
-        first_image=backend_images[0] if backend_images else None,
-        distance_meters=distance_meters,
-        latitude=place.lat,
-        longitude=place.lng,
-        average_rating=avg_rating,
-        review_count=review_count,
-        cuisine=place.cuisine,
+        **base_response.model_dump(),
         address=place.address,
         created_at=place.created_at.isoformat(),
         updated_at=place.updated_at.isoformat(),
         images=backend_images,
-        test_id=place.test_id,
     )
 
 

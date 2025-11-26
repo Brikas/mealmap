@@ -25,7 +25,6 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     token_data = await verify_token(token, db)
-    logger.info("Token data in dependency:", token_data)
     if token_data is None:
         raise credentials_exception
 

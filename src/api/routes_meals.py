@@ -24,6 +24,11 @@ from src.api.common_schemas import (
     ObjectCreationResponse,
 )
 from src.api.dependencies import get_current_user
+from src.api.response_schemas import (
+    MealDetailedResponse,
+    MealResponse,
+    MealTags,
+)
 from src.db.models import Meal, MealImage, MealReview, Place, User
 from src.db.session import get_async_db_session
 from src.services import image_processing, storage
@@ -31,48 +36,10 @@ from src.services.recommendation import (
     RecommendationService,
     update_meal_features_background,
 )
-from src.utils.misc_utils import calculate_distance, calculate_majority_tag
+from src.services.response_builder import build_meal_response
 from src.utils.pagination import Page, PaginationInput, paginate_list
 
 router = APIRouter()
-
-
-class MealTags(BaseModel):
-    is_vegan: Optional[str] = None
-    is_halal: Optional[str] = None
-    is_vegetarian: Optional[str] = None
-    is_spicy: Optional[str] = None
-    is_gluten_free: Optional[str] = None
-    is_dairy_free: Optional[str] = None
-    is_nut_free: Optional[str] = None
-
-
-class MealResponse(BaseModel):
-    id: uuid.UUID
-    name: str
-    price: Optional[float] = None
-    place_id: uuid.UUID
-    place_name: str
-    avg_rating: Optional[float] = None
-    review_count: int
-    avg_waiting_time: Optional[float] = None
-    avg_price: Optional[float] = None
-    first_image: Optional[BackendImageResponse] = None
-    distance_meters: Optional[float] = None
-    is_new: bool
-    is_popular: bool
-    match_score: Optional[float] = None
-
-    tags: MealTags
-
-    test_id: Optional[str] = None
-
-
-class MealDetailedResponse(MealResponse):
-    images: List[BackendImageResponse] = []
-    description: Optional[str] = None
-    created_at: str
-    updated_at: str
 
 
 @router.post("/meals", response_model=ObjectCreationResponse)
@@ -314,126 +281,38 @@ async def get_meals(
     processed_meals = []
     now = datetime.now(timezone.utc)
     for meal in meals:
-        reviews = meal.meal_reviews
+        response = build_meal_response(meal, lat, lng, now)
 
-        review_count = len(reviews)
-        avg_rating = (
-            sum(r.rating for r in reviews) / review_count if review_count > 0 else None
-        )
-
-        waiting_times = [
-            r.waiting_time_minutes
-            for r in reviews
-            if r.waiting_time_minutes is not None
-        ]
-        avg_waiting_time = (
-            sum(waiting_times) / len(waiting_times) if waiting_times else None
-        )
-
-        prices = [r.price for r in reviews if r.price is not None]
-        avg_price = sum(prices) / len(prices) if prices else None
-
-        is_vegan = calculate_majority_tag(reviews, "is_vegan")
-        is_halal = calculate_majority_tag(reviews, "is_halal")
-        is_vegetarian = calculate_majority_tag(reviews, "is_vegetarian")
-        is_spicy = calculate_majority_tag(reviews, "is_spicy")
-        is_gluten_free = calculate_majority_tag(reviews, "is_gluten_free")
-        is_dairy_free = calculate_majority_tag(reviews, "is_dairy_free")
-        is_nut_free = calculate_majority_tag(reviews, "is_nut_free")
-
-        is_new = False
-        if meal.created_at:
-            created_at = meal.created_at
-            if created_at.tzinfo is None:
-                created_at = created_at.replace(tzinfo=timezone.utc)
-            is_new = (now - created_at) < timedelta(days=14)
-
-        first_image = None
-
-        # Check meal images first
-        if meal.images:
-            sorted_meal_images = sorted(meal.images, key=lambda x: x.sequence_index)
-            if sorted_meal_images:
-                first_img_obj = sorted_meal_images[0]
-                url = storage.generate_presigned_url_or_none(first_img_obj.image_path)
-                if url:
-                    first_image = BackendImageResponse(
-                        id=first_img_obj.id,
-                        image_url=url,
-                        sequence_index=first_img_obj.sequence_index,
-                    )
-
-        # If no meal image, check reviews
-        if not first_image:
-            sorted_reviews = sorted(reviews, key=lambda r: r.created_at, reverse=True)
-            for r in sorted_reviews:
-                if r.images:
-                    # Sort images by sequence index if available, or just take first
-                    # Assuming r.images is a list of MealReviewImage objects
-                    # They have sequence_index
-                    sorted_imgs = sorted(r.images, key=lambda x: x.sequence_index)
-                    if sorted_imgs:
-                        img_obj = sorted_imgs[0]
-                        url = storage.generate_presigned_url_or_none(img_obj.image_path)
-                        if url:
-                            first_image = BackendImageResponse(
-                                id=img_obj.id,
-                                image_url=url,
-                                sequence_index=img_obj.sequence_index,
-                            )
-                            break
-
-        distance = None
-        if lat is not None and lng is not None:
-            distance = calculate_distance(lat, lng, meal.place.lat, meal.place.lng)
-            if radius_m is not None and distance > radius_m:
+        if radius_m is not None:
+            if response.distance_meters is None or response.distance_meters > radius_m:
                 continue
 
         if min_rating is not None:
-            if avg_rating is None or avg_rating < min_rating:
+            if response.avg_rating is None or response.avg_rating < min_rating:
                 continue
 
         if max_price is not None:
-            price_to_check = avg_price if avg_price is not None else meal.price
+            price_to_check = (
+                response.avg_price if response.avg_price is not None else response.price
+            )
             if price_to_check is None or price_to_check > max_price:
                 continue
 
-        processed_meals.append(
-            {
-                "meal": meal,
-                "avg_rating": avg_rating,
-                "review_count": review_count,
-                "avg_waiting_time": avg_waiting_time,
-                "avg_price": avg_price,
-                "first_image": first_image,
-                "distance": distance,
-                "tags": {
-                    "is_vegan": is_vegan,
-                    "is_halal": is_halal,
-                    "is_vegetarian": is_vegetarian,
-                    "is_spicy": is_spicy,
-                    "is_gluten_free": is_gluten_free,
-                    "is_dairy_free": is_dairy_free,
-                    "is_nut_free": is_nut_free,
-                },
-                "is_new": is_new,
-                "is_popular": False,
-            }
-        )
+        processed_meals.append(response)
 
-    def get_sort_key(item):
+    def get_sort_key(item: MealResponse):
         key = sort_by
-        val = item.get(key)
+        val = None
         if key == "rating":
-            val = item["avg_rating"]
+            val = item.avg_rating
         elif key == "price":
-            val = item["avg_price"]
+            val = item.avg_price
         elif key == "waiting_time":
-            val = item["avg_waiting_time"]
+            val = item.avg_waiting_time
         elif key == "distance":
-            val = item["distance"]
+            val = item.distance_meters
         elif key == "review_count":
-            val = item["review_count"]
+            val = item.review_count
 
         if val is None:
             return float("-inf") if sort_order == "desc" else float("inf")
@@ -447,29 +326,7 @@ async def get_meals(
         page_size=pagination.page_size,
     )
 
-    results = []
-    for item in page_data.results:
-        m = item["meal"]
-        tags = item["tags"]
-        results.append(
-            MealResponse(
-                id=m.id,
-                name=m.name,
-                price=m.price,
-                place_id=m.place_id,
-                place_name=m.place.name,
-                avg_rating=item["avg_rating"],
-                review_count=item["review_count"],
-                avg_waiting_time=item["avg_waiting_time"],
-                avg_price=item["avg_price"],
-                first_image=item["first_image"],
-                distance_meters=item["distance"],
-                is_new=item["is_new"],
-                is_popular=item["is_popular"],
-                tags=MealTags(**tags),
-                test_id=m.test_id,
-            )
-        )
+    results = page_data.results
 
     return Page[MealResponse](
         results=results,
@@ -505,32 +362,12 @@ async def get_meal_details(
     if not meal:
         raise HTTPException(status_code=404, detail="Meal not found")
 
-    reviews = meal.meal_reviews
+    now = datetime.now(timezone.utc)
+    base_response = build_meal_response(meal, lat, lng, now)
 
-    review_count = len(reviews)
-    avg_rating = (
-        sum(r.rating for r in reviews) / review_count if review_count > 0 else None
-    )
-
-    waiting_times = [
-        r.waiting_time_minutes for r in reviews if r.waiting_time_minutes is not None
-    ]
-    avg_waiting_time = (
-        sum(waiting_times) / len(waiting_times) if waiting_times else None
-    )
-
-    prices = [r.price for r in reviews if r.price is not None]
-    avg_price = sum(prices) / len(prices) if prices else None
-
-    is_vegan = calculate_majority_tag(reviews, "is_vegan")
-    is_halal = calculate_majority_tag(reviews, "is_halal")
-    is_vegetarian = calculate_majority_tag(reviews, "is_vegetarian")
-    is_spicy = calculate_majority_tag(reviews, "is_spicy")
-    is_gluten_free = calculate_majority_tag(reviews, "is_gluten_free")
-    is_dairy_free = calculate_majority_tag(reviews, "is_dairy_free")
-    is_nut_free = calculate_majority_tag(reviews, "is_nut_free")
-
+    # Extra logic for all images (not just first)
     all_images = []
+    reviews = meal.meal_reviews
 
     # Add meal images first
     if meal.images:
@@ -564,43 +401,10 @@ async def get_meal_details(
         if len(all_images) >= 10:
             break
 
-    first_image = all_images[0] if all_images else None
-
-    distance = None
-    if lat is not None and lng is not None:
-        distance = calculate_distance(lat, lng, meal.place.lat, meal.place.lng)
-
-    now = datetime.now(timezone.utc)
-    created_at = meal.created_at
-    if created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=timezone.utc)
-    is_new = (now - created_at) < timedelta(days=14)
-
     return MealDetailedResponse(
-        id=meal.id,
-        name=meal.name,
-        price=meal.price,
-        place_id=meal.place_id,
-        place_name=meal.place.name,
-        avg_rating=avg_rating,
-        review_count=review_count,
-        avg_waiting_time=avg_waiting_time,
-        avg_price=avg_price,
-        first_image=first_image,
-        distance_meters=distance,
-        is_new=is_new,
-        is_popular=False,
-        tags=MealTags(
-            is_vegan=is_vegan,
-            is_halal=is_halal,
-            is_vegetarian=is_vegetarian,
-            is_spicy=is_spicy,
-            is_gluten_free=is_gluten_free,
-            is_dairy_free=is_dairy_free,
-            is_nut_free=is_nut_free,
-        ),
-        test_id=meal.test_id,
+        **base_response.model_dump(),
         images=all_images,
+        description=None,
         created_at=meal.created_at.isoformat(),
         updated_at=meal.updated_at.isoformat(),
     )

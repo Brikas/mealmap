@@ -168,6 +168,15 @@ class User(Base):
     computed_preferences: Mapped["ComputedUserPreferences"] = relationship(
         back_populates="user", cascade="all, delete-orphan", uselist=False
     )
+    bookmarks: Mapped[List["UserMealBookmarks"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    place_bookmarks: Mapped[List["UserPlaceBookmarks"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    place_bookmarks: Mapped[List["UserPlaceBookmarks"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class Place(Base):
@@ -195,6 +204,9 @@ class Place(Base):
         back_populates="place", cascade="all, delete-orphan"
     )
     meals: Mapped[List["Meal"]] = relationship(
+        back_populates="place", cascade="all, delete-orphan"
+    )
+    bookmarks: Mapped[List["UserPlaceBookmarks"]] = relationship(
         back_populates="place", cascade="all, delete-orphan"
     )
 
@@ -232,6 +244,9 @@ class Meal(Base):
     )
     computed_features: Mapped["ComputedMealFeatures"] = relationship(
         back_populates="meal", cascade="all, delete-orphan", uselist=False
+    )
+    bookmarks: Mapped[List["UserMealBookmarks"]] = relationship(
+        back_populates="meal", cascade="all, delete-orphan"
     )
 
 
@@ -384,3 +399,41 @@ class ComputedUserPreferences(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="computed_preferences")
+
+
+class UserMealBookmarks(Base):
+    __tablename__ = "user_meal_bookmarks"
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        ForeignKey("app_user.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    meal_id: Mapped[uuid.UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        ForeignKey("meal.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime, server_default=func.now())
+
+    # --- Relationships ---
+    user: Mapped["User"] = relationship(back_populates="bookmarks")
+    meal: Mapped["Meal"] = relationship(back_populates="bookmarks")
+
+
+class UserPlaceBookmarks(Base):
+    __tablename__ = "user_place_bookmarks"
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        ForeignKey("app_user.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    place_id: Mapped[uuid.UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        ForeignKey("place.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime, server_default=func.now())
+
+    # --- Relationships ---
+    user: Mapped["User"] = relationship(back_populates="place_bookmarks")
+    place: Mapped["Place"] = relationship(back_populates="bookmarks")
