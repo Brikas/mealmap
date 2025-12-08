@@ -366,10 +366,9 @@ async def get_meal_details(
     base_response = build_meal_response(meal, lat, lng, now)
 
     # Extra logic for all images (not just first)
-    all_images = []
-    reviews = meal.meal_reviews
+    all_images: List[BackendImageResponse] = []
 
-    # Add meal images first
+    # Add meal images first (always real)
     if meal.images:
         for img in sorted(meal.images, key=lambda x: x.sequence_index):
             url = storage.generate_presigned_url_or_none(img.image_path)
@@ -382,9 +381,13 @@ async def get_meal_details(
                     )
                 )
 
-    sorted_reviews = sorted(reviews, key=lambda r: r.created_at, reverse=True)
-    for r in sorted_reviews:
-        if r.images:
+    real_reviews = [r for r in meal.meal_reviews if not r.is_synthetic]
+    synthetic_reviews = [r for r in meal.meal_reviews if r.is_synthetic]
+
+    def append_review_images(reviews: List[MealReview]) -> bool:
+        """Append images from reviews in order; return True if any added."""
+        added = False
+        for r in sorted(reviews, key=lambda rev: rev.created_at, reverse=True):
             sorted_imgs = sorted(r.images, key=lambda x: x.sequence_index)
             for img in sorted_imgs:
                 url = storage.generate_presigned_url_or_none(img.image_path)
@@ -396,10 +399,18 @@ async def get_meal_details(
                             sequence_index=img.sequence_index,
                         )
                     )
+                    added = True
                 if len(all_images) >= 20:
-                    break
-        if len(all_images) >= 10:
-            break
+                    return added
+            if len(all_images) >= 10:
+                return added
+        return added
+
+    added_real = append_review_images(real_reviews)
+
+    # Only fall back to synthetic review images if no real images were added
+    if not added_real and not all_images:
+        append_review_images(synthetic_reviews)
 
     return MealDetailedResponse(
         **base_response.model_dump(),

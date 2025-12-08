@@ -46,6 +46,12 @@ EPSILON_IGNORE_METRIC = 0.1
 
 
 class RecommendationService:
+    """
+    Service for handling meal recommendations, including updating meal features.
+
+    It includes synthetic user reviews for understanding features about meals.
+    """
+
     def __init__(self, db: AsyncSession):
         self.db = db
 

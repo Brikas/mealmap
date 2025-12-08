@@ -563,6 +563,9 @@ async def get_reviews(
         selectinload(MealReview.user),
     )
 
+    # Only non-synthetic reviews
+    query = query.where(MealReview.is_synthetic.is_(False))
+
     # Apply filters
     if place_id:
         query = query.join(MealReview.meal).where(Meal.place_id == place_id)

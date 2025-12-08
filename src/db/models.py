@@ -268,6 +268,9 @@ class MealReview(Base):
     updated_at: Mapped[datetime] = mapped_column(
         sa.DateTime, server_default=func.now(), onupdate=func.now()
     )
+    is_synthetic: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=sa.text("false")
+    )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         sa.UUID(as_uuid=True), ForeignKey("app_user.id"), nullable=False

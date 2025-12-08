@@ -28,12 +28,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.api.auth import jwt_utils
-from src.api.common_schemas import BackendImageResponse
 from src.api.dependencies import get_current_user
 
 # Import schemas from reviews route (assuming no circular dependency issues for schemas)
 # If this fails, we might need to move schemas to common_schemas.py
-from src.api.routes_meals import MealResponse, MealTags
+from src.api.routes_meals import MealResponse
 from src.api.routes_reviews import (
     PlaceBasicInfo,
     ReviewResponse,
@@ -44,7 +43,7 @@ from src.db.models import MealReview, MealReviewImage, Place, User
 from src.db.session import get_async_db_session
 from src.services import image_processing, storage
 from src.services.recommendation import RecommendationService
-from src.utils.misc_utils import calculate_distance, calculate_majority_tag
+from src.services.response_builder import build_meal_response
 from src.utils.pagination import Page, PaginationInput, paginate_query
 
 router = APIRouter()
@@ -405,95 +404,12 @@ async def get_my_feed(
         current_user.id, limit=limit, lat=lat, lng=lng
     )
 
-    results = []
+    results: List[MealResponse] = []
     now = datetime.now(timezone.utc)
 
     for meal, score in recommendations:
-        reviews = meal.meal_reviews
-        place = meal.place
-
-        review_count = len(reviews)
-        avg_rating = (
-            sum(r.rating for r in reviews) / review_count if review_count > 0 else None
-        )
-
-        waiting_times = [
-            r.waiting_time_minutes
-            for r in reviews
-            if r.waiting_time_minutes is not None
-        ]
-        avg_waiting_time = (
-            sum(waiting_times) / len(waiting_times) if waiting_times else None
-        )
-
-        prices = [r.price for r in reviews if r.price is not None]
-        avg_price = sum(prices) / len(prices) if prices else None
-
-        is_vegan = calculate_majority_tag(reviews, "is_vegan")
-        is_halal = calculate_majority_tag(reviews, "is_halal")
-        is_vegetarian = calculate_majority_tag(reviews, "is_vegetarian")
-        is_spicy = calculate_majority_tag(reviews, "is_spicy")
-        is_gluten_free = calculate_majority_tag(reviews, "is_gluten_free")
-        is_dairy_free = calculate_majority_tag(reviews, "is_dairy_free")
-        is_nut_free = calculate_majority_tag(reviews, "is_nut_free")
-
-        is_new = False
-        if meal.created_at:
-            created_at = meal.created_at
-            if created_at.tzinfo is None:
-                created_at = created_at.replace(tzinfo=timezone.utc)
-            is_new = (now - created_at) < timedelta(days=14)
-
-        first_image = None
-        sorted_reviews = sorted(reviews, key=lambda r: r.created_at, reverse=True)
-        for r in sorted_reviews:
-            if r.images:
-                sorted_imgs = sorted(r.images, key=lambda i: i.sequence_index)
-                first_image = BackendImageResponse(
-                    id=sorted_imgs[0].id,
-                    image_url=storage.generate_presigned_url(sorted_imgs[0].image_path),
-                    sequence_index=sorted_imgs[0].sequence_index,
-                )
-                break
-
-        distance_meters = None
-        if (
-            lat is not None
-            and lng is not None
-            and place.lat is not None
-            and place.lng is not None
-        ):
-            distance_meters = calculate_distance(
-                lat, lng, meal.place.lat, meal.place.lng
-            )
-
-        results.append(
-            MealResponse(
-                id=meal.id,
-                name=meal.name,
-                price=meal.price,
-                place_id=meal.place_id,
-                place_name=place.name,
-                avg_rating=avg_rating,
-                review_count=review_count,
-                avg_waiting_time=avg_waiting_time,
-                avg_price=avg_price,
-                first_image=first_image,
-                distance_meters=distance_meters,
-                is_new=is_new,
-                is_popular=False,
-                tags=MealTags(
-                    is_vegan=is_vegan,
-                    is_halal=is_halal,
-                    is_vegetarian=is_vegetarian,
-                    is_spicy=is_spicy,
-                    is_gluten_free=is_gluten_free,
-                    is_dairy_free=is_dairy_free,
-                    is_nut_free=is_nut_free,
-                ),
-                match_score=score,
-                test_id=meal.test_id,
-            )
-        )
+        base_response = build_meal_response(meal, lat, lng, now)
+        response_with_score = base_response.model_copy(update={"match_score": score})
+        results.append(response_with_score)
 
     return results

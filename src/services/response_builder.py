@@ -18,31 +18,37 @@ def build_meal_response(
     if now is None:
         now = datetime.now(timezone.utc)
 
-    reviews = meal.meal_reviews
+    # Separate real vs synthetic reviews; only real ones contribute stats
+    real_reviews = [r for r in meal.meal_reviews if not r.is_synthetic]
+    synthetic_reviews = [r for r in meal.meal_reviews if r.is_synthetic]
     place = meal.place
 
-    review_count = len(reviews)
+    review_count = len(real_reviews)
     avg_rating = (
-        sum(r.rating for r in reviews) / review_count if review_count > 0 else None
+        sum(r.rating for r in real_reviews) / review_count if review_count > 0 else None
     )
 
     waiting_times = [
-        r.waiting_time_minutes for r in reviews if r.waiting_time_minutes is not None
+        r.waiting_time_minutes
+        for r in real_reviews
+        if r.waiting_time_minutes is not None
     ]
     avg_waiting_time = (
         sum(waiting_times) / len(waiting_times) if waiting_times else None
     )
 
-    prices = [r.price for r in reviews if r.price is not None]
+    prices = [r.price for r in real_reviews if r.price is not None]
     avg_price = sum(prices) / len(prices) if prices else None
 
-    is_vegan = calculate_majority_tag(reviews, "is_vegan")
-    is_halal = calculate_majority_tag(reviews, "is_halal")
-    is_vegetarian = calculate_majority_tag(reviews, "is_vegetarian")
-    is_spicy = calculate_majority_tag(reviews, "is_spicy")
-    is_gluten_free = calculate_majority_tag(reviews, "is_gluten_free")
-    is_dairy_free = calculate_majority_tag(reviews, "is_dairy_free")
-    is_nut_free = calculate_majority_tag(reviews, "is_nut_free")
+    # Tags can consider both real and synthetic feedback
+    review_tag_pool = real_reviews + synthetic_reviews
+    is_vegan = calculate_majority_tag(review_tag_pool, "is_vegan")
+    is_halal = calculate_majority_tag(review_tag_pool, "is_halal")
+    is_vegetarian = calculate_majority_tag(review_tag_pool, "is_vegetarian")
+    is_spicy = calculate_majority_tag(review_tag_pool, "is_spicy")
+    is_gluten_free = calculate_majority_tag(review_tag_pool, "is_gluten_free")
+    is_dairy_free = calculate_majority_tag(review_tag_pool, "is_dairy_free")
+    is_nut_free = calculate_majority_tag(review_tag_pool, "is_nut_free")
 
     is_new = False
     if meal.created_at:
@@ -65,22 +71,25 @@ def build_meal_response(
                     sequence_index=first_img_obj.sequence_index,
                 )
 
-    # If no meal image, check reviews
-    if not first_image:
+    # If no meal image, check review images preferring real reviews first
+    def first_review_image(reviews: list[MealReview]) -> Optional[BackendImageResponse]:
         sorted_reviews = sorted(reviews, key=lambda r: r.created_at, reverse=True)
         for r in sorted_reviews:
-            if r.images:
-                sorted_imgs = sorted(r.images, key=lambda x: x.sequence_index)
-                if sorted_imgs:
-                    img_obj = sorted_imgs[0]
-                    url = storage.generate_presigned_url_or_none(img_obj.image_path)
-                    if url:
-                        first_image = BackendImageResponse(
-                            id=img_obj.id,
-                            image_url=url,
-                            sequence_index=img_obj.sequence_index,
-                        )
-                        break
+            sorted_imgs = sorted(r.images, key=lambda x: x.sequence_index)
+            for img_obj in sorted_imgs:
+                url = storage.generate_presigned_url_or_none(img_obj.image_path)
+                if url:
+                    return BackendImageResponse(
+                        id=img_obj.id,
+                        image_url=url,
+                        sequence_index=img_obj.sequence_index,
+                    )
+        return None
+
+    if not first_image:
+        first_image = first_review_image(real_reviews) or first_review_image(
+            synthetic_reviews
+        )
 
     distance_meters = None
     if lat is not None and lng is not None and place:
@@ -119,9 +128,8 @@ def build_place_response(
     lng: Optional[float] = None,
 ) -> PlaceResponse:
     # Calculate place stats from loaded meals if available
-    # Note: This assumes place.meals is loaded and populated with reviews
-    # If not loaded, these will be based on empty list or fail if relationship not loaded
-    # Ideally, the caller ensures necessary relationships are loaded.
+    # Note: This assumes place.meals is loaded and populated with reviews.
+    # If not loaded, values fall back to empty lists; ensure relationships are loaded.
 
     avg_rating = None
     review_count = 0
@@ -130,7 +138,8 @@ def build_place_response(
         all_reviews = []
         for m in place.meals:
             if m.meal_reviews:
-                all_reviews.extend(m.meal_reviews)
+                # Only count non-synthetic reviews toward stats
+                all_reviews.extend([r for r in m.meal_reviews if not r.is_synthetic])
 
         if all_reviews:
             review_count = len(all_reviews)
