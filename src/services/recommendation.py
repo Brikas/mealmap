@@ -317,6 +317,7 @@ class RecommendationService:
                 .limit(limit)
                 .options(
                     selectinload(Meal.place),
+                    selectinload(Meal.images),
                     selectinload(Meal.meal_reviews).selectinload(MealReview.images),
                 )
             )
@@ -426,6 +427,7 @@ class RecommendationService:
                 .limit(limit)
                 .options(
                     selectinload(Meal.place),
+                    selectinload(Meal.images),
                     selectinload(Meal.meal_reviews).selectinload(MealReview.images),
                 )
             )
@@ -506,6 +508,7 @@ class RecommendationService:
             .where(Meal.id.in_(top_meal_ids))
             .options(
                 selectinload(Meal.place),
+                selectinload(Meal.images),
                 selectinload(Meal.meal_reviews).selectinload(MealReview.images),
             )
         )
